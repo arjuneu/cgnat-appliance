@@ -1,0 +1,37 @@
+[
+  {
+    "router_id": "core_mikrotik_01",
+    "name": "Core-MikroTik-CCR1036",
+    "ip": "192.0.2.1",
+    "vendor": "mikrotik",
+    "port": 22,
+    "username": "natlog",
+    "address_list": "scanner",
+    "supported_lists": [
+      "scanner",
+      "drop-flood",
+      "vip-whitelist"
+    ],
+    "role": "cgnat",
+    "sync_enabled": true,
+    "description": "Lab / Staging CGNAT Gateway",
+    "password_vault_key": "ROUTER_PASS_CORE_MIKROTIK_01"
+  },
+  {
+    "router_id": "border_juniper_01",
+    "name": "Border-Juniper-MX204",
+    "ip": "198.51.100.1",
+    "vendor": "juniper",
+    "port": 22,
+    "username": "netops",
+    "address_list": "THREAT-SHIELD-PREFIXES",
+    "supported_lists": [
+      "THREAT-SHIELD-PREFIXES",
+      "BGP-BLACKHOLE-PL"
+    ],
+    "role": "border",
+    "sync_enabled": true,
+    "description": "Border Edge BGP Router",
+    "password_vault_key": "ROUTER_PASS_BORDER_JUNIPER_01"
+  }
+]

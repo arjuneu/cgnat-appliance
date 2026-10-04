@@ -1,0 +1,31 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Configuration Vaults & Production Secrets (CRITICAL: NEVER COMMIT)
+data/*.vault
+data/*.key
+data/*.enc
+data/routers.json
+data/users.json
+data/active_blocked_cache.json
+data/latest_ai_threats.json
+data/mikrotik_sync_state.json
+data/.turnkey_initialized
+
+# Operational Logs, Dumps, and Exports
+*.log
+*.xlsx
+*.csv
+backups/
+downloads/
+/tmp/
+
+# System and IDE Files
+.DS_Store
+.idea/
+.vscode/
+*.swp

@@ -86,9 +86,13 @@ def get_threat_config() -> Dict[str, Any]:
                 for k, v in data.items():
                     if v is not None:
                         defaults[k] = v
-                return defaults
+        defaults["has_ai_keys"] = has_ai_keys()
+        defaults["effective_enabled"] = defaults.get("enabled", True) and has_ai_keys()
+        return defaults
     except Exception as e:
         logger.error(f"Error reading sync state file ({STATE_FILE}): {e}")
+    defaults["has_ai_keys"] = has_ai_keys()
+    defaults["effective_enabled"] = defaults.get("enabled", True) and has_ai_keys()
     return defaults
 
 def set_threat_config(
@@ -147,7 +151,21 @@ def set_sync_state(enabled: bool, updated_by: str = "admin", reason: str = "") -
     """Sets stop/start toggle state for MikroTik sync while preserving threshold settings."""
     return set_threat_config(enabled=enabled, updated_by=updated_by, reason=reason)
 
+def has_ai_keys() -> bool:
+    """Checks if there is at least one active Gemini AI key available for autonomous reasoning."""
+    try:
+        from ai_key_vault import key_vault
+        if key_vault and key_vault.has_active_keys():
+            return True
+    except Exception:
+        pass
+    env_key = os.getenv("GEMINI_API_KEY", "").strip()
+    return bool(env_key and not env_key.startswith("AQ.dummy"))
+
 def is_sync_enabled() -> bool:
+    # Strictly block automated sync if no AI API keys are configured
+    if not has_ai_keys():
+        return False
     return get_sync_state().get("enabled", True)
 
 def is_whitelisted(addr_str: str) -> bool:
@@ -787,13 +805,15 @@ def sync_all(dry_run: bool = False, minutes: int = 15) -> Dict[str, Any]:
     cfg = get_threat_config()
     logger.info(f"Synchronizing scanner/flood threats with MikroTik ({MIKROTIK_IP}). Sync enabled: {cfg.get('enabled')}")
 
-    # If sync is stopped and this is not a dry-run, stop immediately
-    if not cfg.get("enabled", True) and not dry_run:
-        logger.warning("MikroTik sync is currently STOPPED/PAUSED by administrator. Skipping automatic additions.")
+    # If sync is stopped or no AI keys exist, stop immediately unless dry-run
+    if not is_sync_enabled() and not dry_run:
+        reason_msg = "Automated threat sync is blocked: Requires at least one configured AI API key. Threats must be added manually." if not has_ai_keys() else "MikroTik automatic synchronization is currently STOPPED. No changes made."
+        logger.warning(f"MikroTik sync skipped: {reason_msg}")
         existing_items = get_mikrotik_address_list(ADDRESS_LIST_NAME)
         return {
-            "status": "stopped",
-            "message": "MikroTik automatic synchronization is currently STOPPED. No changes made.",
+            "status": "blocked" if not has_ai_keys() else "stopped",
+            "message": reason_msg,
+            "has_ai_keys": has_ai_keys(),
             "sync_state": cfg,
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "minutes_window": minutes,

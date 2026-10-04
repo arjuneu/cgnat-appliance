@@ -124,6 +124,21 @@ class AIKeyVault:
         keys = self._read_vault()
         return [(k.get("name", "Unknown Account"), k.get("key", "")) for k in keys if k.get("key")]
 
+    def has_active_keys(self) -> bool:
+        """Returns True if there is at least one active, non-empty Gemini API key in the vault or env."""
+        try:
+            raw_keys = self.get_raw_keys_in_order()
+            for _, key_val in raw_keys:
+                if key_val and key_val.strip() and not key_val.startswith("AQ.dummy"):
+                    return True
+        except Exception as e:
+            logger.error(f"Error checking active keys in vault: {e}")
+
+        env_key = os.getenv("GEMINI_API_KEY", "").strip()
+        if env_key and not env_key.startswith("AQ.dummy"):
+            return True
+        return False
+
     def add_key(self, name: str, raw_key: str) -> Dict[str, Any]:
         """Adds a new key to the bottom of the priority pool."""
         keys = self._read_vault()

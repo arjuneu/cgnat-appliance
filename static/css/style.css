@@ -136,7 +136,7 @@
 
       border-radius: 8px;
 
-      color: #fff;
+      color: var(--text-main);
 
       font-size: 13px;
 
@@ -294,20 +294,14 @@
 
     }
 
-    .nav-tab-btn:hover { background: var(--bg-card); color: #fff; }
+    .nav-tab-btn:hover { background: var(--bg-card-hover); color: var(--text-main); }
 
     .nav-tab-btn.active {
-
       background: var(--bg-card);
-
-      border-color: var(--border-light);
-
-      color: #fff;
-
+      border-color: var(--accent);
+      color: var(--accent);
       font-weight: 600;
-
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-
+      box-shadow: var(--card-shadow);
     }
 
     .nav-tab-btn .badge-pulse {
@@ -603,42 +597,26 @@
     /* ================= GRAFANA TIME PICKER TRIGGER & POPOVER ================= */
 
     .grafana-picker-trigger {
-
-      display: inline-flex;
-
-      align-items: center;
-
-      gap: 8px;
-
-      background: #111b27;
-
-      border: 1px solid #2b3a4f;
-
-      color: #f1f5f9;
-
-      font-size: 12.5px;
-
-      font-weight: 500;
-
-      padding: 6px 12px;
-
-      border-radius: 6px;
-
-      cursor: pointer;
-
-      transition: all 0.2s;
-
-      font-family: 'Inter', sans-serif;
-
-    }
-
-    .grafana-picker-trigger:hover, .grafana-picker-trigger.active {
-
-      border-color: var(--accent);
-
-      background: #182435;
-
-    }
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  color: var(--text-main);
+  font-size: 12.5px;
+  font-family: inherit;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: var(--card-shadow);
+  user-select: none;
+}
+.grafana-picker-trigger:hover, .grafana-picker-trigger.active {
+  border-color: var(--accent);
+  background: var(--bg-card-hover);
+  color: var(--accent);
+}
 
     .grafana-picker-trigger .arrow-down {
 
@@ -664,9 +642,9 @@
 
       max-width: calc(100vw - 32px);
 
-      background: #181b1f;
+      background: var(--bg-card);
 
-      border: 1px solid #2f343c;
+      border: 1px solid var(--border-light);
 
       border-radius: 8px;
 
@@ -674,7 +652,7 @@
 
       z-index: 1050;
 
-      color: #d8d9da;
+      color: var(--text-body);
 
       font-size: 13px;
 
@@ -748,9 +726,9 @@
 
       width: 100%;
 
-      background: #0b0c0e;
+      background: var(--input-bg);
 
-      border: 1px solid #2f343c;
+      border: 1px solid var(--border-light);
 
       border-radius: 4px;
 
@@ -912,9 +890,9 @@
 
       width: 100%;
 
-      background: #0b0c0e;
+      background: var(--input-bg);
 
-      border: 1px solid #2f343c;
+      border: 1px solid var(--border-light);
 
       border-radius: 4px;
 
@@ -1234,7 +1212,7 @@
 
       font-weight: 700;
 
-      color: #fff;
+      color: var(--text-main);
 
       font-family: 'JetBrains Mono', monospace;
 
@@ -1332,7 +1310,7 @@
 
       font-weight: 600;
 
-      color: #fff;
+      color: var(--text-main);
 
       margin-bottom: 14px;
 

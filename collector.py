@@ -479,7 +479,7 @@ class MetricsCollector:
             FROM nat_logs.translations
             {scan_where}
             GROUP BY src_ip, router_ip
-            ORDER BY flows DESC
+            ORDER BY distinct_ports DESC, flows DESC
             LIMIT {int(limit)}
             """
             r_top_sub = self._query(q_top_sub, parameters=params).result_rows

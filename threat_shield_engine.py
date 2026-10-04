@@ -42,16 +42,17 @@ DEFAULT_THREAT_CONFIG = {
 }
 
 def get_threat_config() -> Dict[str, Any]:
+    cfg = dict(DEFAULT_THREAT_CONFIG)
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-                merged = dict(DEFAULT_THREAT_CONFIG)
-                merged.update(cfg)
-                return merged
+                saved = json.load(f)
+                cfg.update(saved)
         except Exception as e:
             logger.error(f"Failed to read threat state: {e}")
-    return dict(DEFAULT_THREAT_CONFIG)
+    cfg["has_ai_keys"] = has_ai_keys()
+    cfg["effective_enabled"] = cfg.get("enabled", True) and has_ai_keys()
+    return cfg
 
 def set_threat_config(new_config: Dict[str, Any], updated_by: str = "admin") -> Dict[str, Any]:
     current = get_threat_config()
@@ -66,7 +67,21 @@ def set_threat_config(new_config: Dict[str, Any], updated_by: str = "admin") -> 
         logger.error(f"Failed to save threat state: {e}")
     return current
 
+def has_ai_keys() -> bool:
+    """Checks if there is at least one active Gemini AI key available for autonomous reasoning."""
+    try:
+        from ai_key_vault import key_vault
+        if key_vault and key_vault.has_active_keys():
+            return True
+    except Exception:
+        pass
+    env_key = os.getenv("GEMINI_API_KEY", "").strip()
+    return bool(env_key and not env_key.startswith("AQ.dummy"))
+
 def is_sync_enabled() -> bool:
+    # Strictly block automated sync if no AI API keys are configured
+    if not has_ai_keys():
+        return False
     return get_threat_config().get("enabled", True)
 
 def _build_whitelist_networks() -> List[ipaddress.IPv4Network]:
@@ -322,6 +337,12 @@ class ThreatShieldEngine:
     def sync_fleet(self, minutes: int = 15, dry_run: bool = False, router_id: Optional[str] = None) -> Dict[str, Any]:
         """Full automated sync cycle across fleet or chosen router."""
         if not is_sync_enabled() and not dry_run:
+            if not has_ai_keys():
+                return {
+                    "status": "blocked",
+                    "reason": "no_ai_keys",
+                    "message": "Automated threat sync is blocked: Zero AI API keys configured. Cloud AI reasoning is required for automated mitigation. Threats must be added manually."
+                }
             return {"status": "skipped", "message": "Threat shield sync is disabled in settings"}
 
         scanners, floods, sweeps = self.find_threat_candidates(minutes=minutes)

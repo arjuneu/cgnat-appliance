@@ -19,9 +19,9 @@ if [ "$LOCAL" = "$REMOTE" ]; then
     exit 0
 fi
 
-echo "New update found! ($LOCAL -> $REMOTE)"
+echo "New update found! (${LOCAL:0:8} -> ${REMOTE:0:8})"
 echo "Pulling updates..."
-git pull origin main
+git pull --rebase origin main
 
 # Check if requirements changed
 if git diff --name-only "$LOCAL" HEAD | grep -q "requirements.txt"; then

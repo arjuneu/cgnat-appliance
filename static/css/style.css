@@ -1808,9 +1808,8 @@
 
     .btn-action.cyan:hover { background: #0e7490; }
 
-    .btn-action.secondary { background: #1e293b; color: var(--text-muted); border: 1px solid var(--border-light); }
-
-    .btn-action.secondary:hover { background: #334155; color: #fff; }
+    .btn-action.secondary { background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-light); box-shadow: var(--card-shadow); font-weight: 500; }
+    .btn-action.secondary:hover { background: var(--bg-card-hover); color: var(--accent); border-color: var(--accent); }
 
 
 
@@ -1967,4 +1966,16 @@
 .btn-theme-toggle:hover {
   background: var(--bg-card-hover);
   border-color: var(--accent);
+}
+
+
+/* Explicit Select & Option Theming */
+select.form-control, select, .select-filter {
+  background-color: var(--input-bg) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--border-light) !important;
+}
+select.form-control option, select option, .select-filter option {
+  background-color: var(--bg-card) !important;
+  color: var(--text-main) !important;
 }

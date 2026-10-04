@@ -1683,6 +1683,81 @@ let authToken = localStorage.getItem("nat_ai_token");
 
 
 
+    
+    // Multi-Column Subscriber Sorting State (Default: distinct_ports DESC)
+    let currentSubsSortColumn = 'distinct_ports';
+    let currentSubsSortDir = 'desc';
+
+    function sortSubscribersBy(column) {
+      if (column === 'distinct_ports') {
+        // Distinct Ports in descending order cannot be changed (always high to low)
+        currentSubsSortColumn = 'distinct_ports';
+        currentSubsSortDir = 'desc';
+      } else {
+        if (currentSubsSortColumn === column) {
+          // Toggle direction for other columns
+          currentSubsSortDir = (currentSubsSortDir === 'desc') ? 'asc' : 'desc';
+        } else {
+          currentSubsSortColumn = column;
+          currentSubsSortDir = (column === 'src_ip' || column === 'router_ip' || column === 'assigned_nat_ip' || column === 'behavior') ? 'asc' : 'desc';
+        }
+      }
+      updateSubsSortIcons();
+      filterSubscribersTable();
+    }
+
+    function updateSubsSortIcons() {
+      const columns = ['src_ip', 'router_ip', 'flows', 'distinct_dests', 'distinct_ports', 'assigned_nat_ip', 'behavior'];
+      columns.forEach(col => {
+        const iconEl = document.getElementById(`sort-icon-${col}`);
+        const thEl = iconEl ? iconEl.closest('th') : null;
+        if (!iconEl) return;
+
+        if (col === currentSubsSortColumn) {
+          iconEl.innerHTML = currentSubsSortDir === 'desc' ? ' &#9660;' : ' &#9650;';
+          if (thEl) {
+            thEl.style.color = 'var(--accent)';
+            thEl.style.fontWeight = '700';
+          }
+        } else if (col === 'distinct_ports') {
+          // Show persistent secondary sort indicator
+          iconEl.innerHTML = ' <span style="font-size: 9px; opacity: 0.6;" title="Permanent secondary tie-breaker">&#9660;</span>';
+          if (thEl) {
+            thEl.style.color = '';
+            thEl.style.fontWeight = '';
+          }
+        } else {
+          iconEl.innerHTML = '';
+          if (thEl) {
+            thEl.style.color = '';
+            thEl.style.fontWeight = '';
+          }
+        }
+      });
+
+      const badgeEl = document.getElementById("subs-active-sort-badge");
+      if (badgeEl) {
+        const colLabels = {
+          distinct_ports: "Distinct Ports",
+          flows: "Window Flows",
+          distinct_dests: "Unique Targets",
+          src_ip: "Subscriber IP",
+          router_ip: "Router Ingress",
+          assigned_nat_ip: "Public NAT IP",
+          behavior: "Behavior Tag"
+        };
+        const activeLabel = colLabels[currentSubsSortColumn] || currentSubsSortColumn;
+        const arrow = currentSubsSortDir === 'desc' ? '&darr;' : '&uarr;';
+        if (currentSubsSortColumn === 'distinct_ports') {
+          badgeEl.innerHTML = `&bull; Sorted: Distinct Ports ${arrow} (Fixed)`;
+          badgeEl.className = "badge-tag cyan";
+        } else {
+          badgeEl.innerHTML = `&bull; Sorted: ${activeLabel} ${arrow} (2nd: Distinct Ports &darr;)`;
+          badgeEl.className = "badge-tag orange";
+        }
+      }
+    }
+
     function filterSubscribersTable() {
 
       const search = (document.getElementById("subs-search-input").value || "").toLowerCase().trim();

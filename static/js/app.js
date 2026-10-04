@@ -1095,7 +1095,7 @@ let authToken = localStorage.getItem("nat_ai_token");
               roleHtml = `<span class="badge-tag purple" style="font-weight: 600;" title="Primary Administrator account role is permanently locked">&#128274; ADMIN</span>`;
             } else {
               roleHtml = `
-                <select class="form-control" style="display: inline-block; width: auto; min-width: 105px; padding: 3px 8px; font-size: 11px; height: 26px; background: #0f172a; border: 1px solid var(--border); color: ${u.role === 'admin' ? '#c084fc' : (u.role === 'operator' ? '#38bdf8' : '#4ade80')}; font-weight: 600; border-radius: 4px;" onchange="changeUserRole('${u.username}', this.value)">
+                <select class="form-control" style="display: inline-block; width: auto; min-width: 105px; padding: 3px 8px; font-size: 11px; height: 26px; background: var(--input-bg); border: 1px solid var(--border-light); color: ${u.role === 'admin' ? '#c084fc' : (u.role === 'operator' ? '#38bdf8' : '#4ade80')}; font-weight: 600; border-radius: 4px;" onchange="changeUserRole('${u.username}', this.value)">
                   <option value="operator" ${u.role === 'operator' ? 'selected' : ''} style="color: #38bdf8;">OPERATOR</option>
                   <option value="admin" ${u.role === 'admin' ? 'selected' : ''} style="color: #c084fc;">ADMIN</option>
                   <option value="viewer" ${u.role === 'viewer' ? 'selected' : ''} style="color: #4ade80;">VIEWER</option>

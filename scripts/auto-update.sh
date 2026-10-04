@@ -20,8 +20,9 @@ if [ "$LOCAL" = "$REMOTE" ]; then
 fi
 
 echo "New update found! (${LOCAL:0:8} -> ${REMOTE:0:8})"
-echo "Pulling updates..."
-git pull --rebase origin main
+echo "Pulling updates cleanly..."
+# Discard any local modifications to tracked source files while preserving ignored vaults and databases
+git reset --hard origin/main
 
 # Check if requirements changed
 if git diff --name-only "$LOCAL" HEAD | grep -q "requirements.txt"; then

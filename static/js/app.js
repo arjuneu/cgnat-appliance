@@ -2566,10 +2566,56 @@ let authToken = localStorage.getItem("nat_ai_token");
 
 
 
-        async function onEnforcementScopeChange() {
+        
+    function updateScopeVisuals(scope) {
+      const selectEl = document.getElementById("select-enforcement-scope");
+      const badgeEl = document.getElementById("active-scope-badge");
+      if (!selectEl) return;
+
+      if (selectEl.value !== scope) {
+        selectEl.value = scope;
+      }
+
+      const scopeMeta = {
+        fleet_wide: {
+          color: "var(--accent)",
+          borderColor: "rgba(59, 130, 246, 0.5)",
+          badgeClass: "badge-tag cyan",
+          label: "Fleet-Wide Active",
+          title: "Active Policy: 🌐 All Fleet Routers (AS-Wide Autonomous Mitigation)"
+        },
+        originating_router: {
+          color: "var(--success)",
+          borderColor: "rgba(16, 185, 129, 0.5)",
+          badgeClass: "badge-tag green",
+          label: "Originating Active",
+          title: "Active Policy: 🎯 Originating Router Only (Isolated Gateway Table)"
+        },
+        hybrid: {
+          color: "var(--warning)",
+          borderColor: "rgba(245, 158, 11, 0.5)",
+          badgeClass: "badge-tag orange",
+          label: "Hybrid Active",
+          title: "Active Policy: ⚡ Smart Hybrid Mode (Local Scans on Originating, Large Sweeps Fleet-Wide)"
+        }
+      };
+
+      const meta = scopeMeta[scope] || scopeMeta.fleet_wide;
+      selectEl.style.color = meta.color;
+      selectEl.style.borderColor = meta.borderColor;
+      selectEl.title = meta.title;
+
+      if (badgeEl) {
+        badgeEl.className = meta.badgeClass;
+        badgeEl.innerHTML = `&bull; ${meta.label}`;
+      }
+    }
+
+    async function onEnforcementScopeChange() {
       const selectEl = document.getElementById("select-enforcement-scope");
       if (!selectEl) return;
       const newScope = selectEl.value;
+      updateScopeVisuals(newScope);
       const statusEl = document.getElementById("threat-sync-status");
 
       try {

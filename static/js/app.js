@@ -1,3 +1,34 @@
+
+// ==============================================================================
+// THEME CONTROLLER (Light / Dark Mode Dual Toggle)
+// ==============================================================================
+function initTheme() {
+  const saved = localStorage.getItem('cgnat_theme') || 'light';
+  applyTheme(saved);
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('cgnat_theme', theme);
+  const icon = document.getElementById('theme-icon');
+  const label = document.getElementById('theme-label');
+  if (icon) icon.textContent = theme === 'dark' ? '🌙' : '☀️';
+  if (label) label.textContent = theme === 'dark' ? 'Dark' : 'Light';
+}
+
+// Auto-initialize theme on load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initTheme);
+} else {
+  initTheme();
+}
+
 // Global Fetch Interceptor for Authentication
 const _nativeFetch = window.fetch;
 window.fetch = async function (url, options = {}) {

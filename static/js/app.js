@@ -1105,7 +1105,7 @@ let authToken = localStorage.getItem("nat_ai_token");
 
             html += `
               <tr>
-                <td><span style="${dotStyle}" title="${isOnline ? 'Online' : 'Offline'}"></span><strong style="color: #fff;">${u.username}</strong> ${isSelf ? '<span style="color: var(--text-dim); font-size: 10px;">(You)</span>' : ''}</td>
+                <td><span style="${dotStyle}" title="${isOnline ? 'Online' : 'Offline'}"></span><strong style="color: var(--text-main);">${u.username}</strong> ${isSelf ? '<span style="color: var(--text-dim); font-size: 10px;">(You)</span>' : ''}</td>
                 <td>${roleHtml}</td>
                 <td style="color: var(--text-dim);">${u.created_at || "--"}</td>
                 <td style="color: var(--text-muted);">${u.last_login || "Never"}</td>
@@ -1769,7 +1769,7 @@ let authToken = localStorage.getItem("nat_ai_token");
 
             <td><span style="color: var(--text-muted);">${s.router_ip}</span></td>
 
-            <td><strong style="color: #fff;">${s.flows.toLocaleString()}</strong></td>
+            <td><strong style="color: var(--text-main);">${s.flows.toLocaleString()}</strong></td>
 
             <td><span style="color: ${isScanner ? 'var(--danger)' : '#cbd5e1'}; font-weight: ${isScanner ? 'bold' : 'normal'};">${s.distinct_dests.toLocaleString()}</span></td>
 
@@ -3299,7 +3299,7 @@ let authToken = localStorage.getItem("nat_ai_token");
 
           <tr>
 
-            <td><strong style="color: #fff; font-family: 'JetBrains Mono', monospace;">${c.dst_ip}</strong></td>
+            <td><strong style="color: var(--text-main); font-family: 'JetBrains Mono', monospace;">${c.dst_ip}</strong></td>
 
             <td>${typeBadge}</td>
 
@@ -3371,7 +3371,7 @@ let authToken = localStorage.getItem("nat_ai_token");
 
               <div style="display: flex; flex-direction: column; gap: 2px;">
 
-                <span style="font-size: 11.5px; font-weight: 600; color: #fff;">${routerIp}</span>
+                <span style="font-size: 11.5px; font-weight: 600; color: var(--text-main);">${routerIp}</span>
 
                 ${vendorBadge}
 
@@ -4238,7 +4238,7 @@ let authToken = localStorage.getItem("nat_ai_token");
 
             <td>${n.router_ip}</td>
 
-            <td><strong style="color: #fff;">${Number(n.active_ports || 0).toLocaleString()}</strong> <span style="color: var(--text-dim); font-size: 11px;">/ 64.5k</span></td>
+            <td><strong style="color: var(--text-main);">${Number(n.active_ports || 0).toLocaleString()}</strong> <span style="color: var(--text-dim); font-size: 11px;">/ 64.5k</span></td>
 
             <td>
 

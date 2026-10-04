@@ -330,6 +330,15 @@ def run_daily_sync(dry_run: bool = False, hours: int = 24) -> Dict[str, Any]:
     logger.info("=" * 70)
 
     if not is_sync_enabled() and not dry_run:
+        has_keys = getattr(mikrotik_sync, "has_ai_keys", lambda: False)()
+        if not has_keys:
+            logger.warning("Automated daily threat sync aborted: No active AI API keys configured. Threats must be added manually.")
+            return {
+                "status": "blocked",
+                "reason": "no_ai_keys",
+                "message": "Automated threat sync is blocked: Zero AI keys configured. Mitigations must be done manually.",
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+            }
         logger.warning("MikroTik sync is currently STOPPED/PAUSED in configuration. Skipping additions.")
         return {
             "status": "stopped",

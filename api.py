@@ -1007,6 +1007,25 @@ def toggle_mikrotik_sync(
     user_payload: Dict[str, Any] = Depends(require_operator)
 ):
     username = user_payload.get("username", "operator")
+
+    # Strict guardrail: Prevent enabling automated sync if no AI API keys are configured
+    if req.enabled:
+        has_keys = False
+        try:
+            from ai_key_vault import key_vault
+            if key_vault and key_vault.has_active_keys():
+                has_keys = True
+        except Exception:
+            pass
+        if not has_keys and os.getenv("GEMINI_API_KEY", "").strip():
+            has_keys = True
+
+        if not has_keys:
+            raise HTTPException(
+                status_code=400,
+                detail="Automated Threat Sync cannot be enabled because no active Gemini AI API keys are configured in AI Key Vault. Cloud AI reasoning is required for automated mitigation to prevent false positives. Please add an AI API key in System Management > AI Keys, or add threat rules manually."
+            )
+
     new_state = {}
     if threat_shield_engine:
         new_state = threat_shield_engine.set_threat_config({"enabled": req.enabled}, updated_by=username)
@@ -1803,6 +1822,22 @@ def get_ai_threat_feed(user_payload: Dict[str, Any] = Depends(get_current_user))
 
 @app.post("/api/v1/threats/sync/daily")
 def trigger_daily_ai_sync(hours: float = 24.0, user_payload: Dict[str, Any] = Depends(require_operator)):
+    has_keys = False
+    try:
+        from ai_key_vault import key_vault
+        if key_vault and key_vault.has_active_keys():
+            has_keys = True
+    except Exception:
+        pass
+    if not has_keys and os.getenv("GEMINI_API_KEY", "").strip():
+        has_keys = True
+
+    if not has_keys:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot execute AI Threat Scan: No active Gemini AI API keys configured. Cloud AI reasoning is required. Please add an AI API key in System Management > AI Keys, or add threat rules manually."
+        )
+
     try:
         import subprocess
         res = subprocess.run(

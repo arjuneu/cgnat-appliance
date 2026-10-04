@@ -2869,12 +2869,49 @@ let authToken = localStorage.getItem("nat_ai_token");
       const threshSub = document.getElementById("kpi-sync-threshold-sub");
       const syncCard = document.getElementById("kpi-card-sync-service");
       const syncIcon = document.getElementById("kpi-sync-icon");
+      const statusBanner = document.getElementById("threat-sync-status");
+
+      const hasAiKeys = (syncState && syncState.has_ai_keys !== undefined) ? !!syncState.has_ai_keys : (window.hasAiApiKeys !== undefined ? window.hasAiApiKeys : true);
+      window.hasAiApiKeys = hasAiKeys;
 
       const minPorts = (syncState && (syncState.udp_sweep_min_ports || syncState.min_ports)) || (currentThreatConfig && currentThreatConfig.min_ports) || 1000;
       const maxSubs = (syncState && (syncState.max_subscribers_for_block || syncState.max_subscribers)) || (currentThreatConfig && currentThreatConfig.max_subscribers) || 4;
 
       if (threshSub) {
         threshSub.innerHTML = `&ge;${minPorts} ports, &le;${maxSubs} subs`;
+      }
+
+      if (!hasAiKeys) {
+        // Strict guardrail: Automated sync is completely blocked without AI API keys
+        if (toggleBtn) {
+          toggleBtn.innerHTML = "&#128683; Threat Sync Blocked (No AI Keys)";
+          toggleBtn.title = "Automated sync is blocked because no AI API keys are configured. You must add threat rules manually or configure an AI API key.";
+          toggleBtn.style.color = "#fbbf24";
+          toggleBtn.style.borderColor = "rgba(245, 158, 11, 0.4)";
+          toggleBtn.style.background = "rgba(245, 158, 11, 0.1)";
+        }
+        if (dotEl) { dotEl.style.background = "#fbbf24"; }
+        if (statusVal) { statusVal.innerText = "BLOCKED (No AI Keys)"; statusVal.style.color = "#fbbf24"; }
+        if (subDesc) { subDesc.innerText = "Automated sync disabled. Add threat rules manually."; }
+        if (syncIcon) { syncIcon.innerHTML = "&#9888;&#65039;"; }
+        if (syncCard) { syncCard.className = "kpi-card warning"; }
+
+        if (statusBanner) {
+          statusBanner.style.display = "block";
+          statusBanner.style.background = "rgba(245, 158, 11, 0.15)";
+          statusBanner.style.color = "var(--warning)";
+          statusBanner.style.border = "1px solid rgba(245, 158, 11, 0.35)";
+          statusBanner.innerHTML = `<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+            <div>
+              <strong>⚠️ Automated Threat Sync Strictly Blocked:</strong> No active Gemini AI API keys configured. Automated mitigation is disabled to prevent false-positive service disruptions.
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn-refresh" onclick="openAddAddressModal()" style="padding: 4px 10px; font-size: 11px; font-weight: 600;">➕ Add Threat Rule Manually</button>
+              <button class="btn-action primary" onclick="openAIKeysModal()" style="padding: 4px 10px; font-size: 11px; font-weight: 600;">🔑 Configure AI Keys</button>
+            </div>
+          </div>`;
+        }
+        return;
       }
 
       if (toggleBtn) {
@@ -2904,90 +2941,58 @@ let authToken = localStorage.getItem("nat_ai_token");
       }
     }
 
-
-
     async function toggleMikrotikSync() {
-
-      const newEnabled = !currentSyncEnabled;
-
-      const toggleBtn = document.getElementById("btn-toggle-sync");
-
-      if (toggleBtn) {
-
-        toggleBtn.disabled = true;
-
-        toggleBtn.innerText = newEnabled ? "Resuming..." : "Stopping...";
-
+      if (window.hasAiApiKeys === false && !currentSyncEnabled) {
+        alert("Cannot enable Automated Threat Sync: No active Gemini AI API keys configured.\n\nAutomated syncing is strictly blocked to prevent false-positive blocks without LLM reasoning.\n\nPlease add a Gemini API key in System Management > AI Keys first, or add threat rules manually using '+ Add Threat Rule'.");
+        openAIKeysModal();
+        return;
       }
 
-
+      const newEnabled = !currentSyncEnabled;
+      const toggleBtn = document.getElementById("btn-toggle-sync");
+      if (toggleBtn) {
+        toggleBtn.disabled = true;
+        toggleBtn.innerText = newEnabled ? "Resuming..." : "Stopping...";
+      }
 
       try {
-
         const res = await fetch("/api/v1/threats/sync/toggle", {
-
           method: "POST",
-
           headers: {
-
             "Content-Type": "application/json",
-
             "Authorization": `Bearer ${authToken || localStorage.getItem('nat_ai_token')}`
-
           },
-
           body: JSON.stringify({ enabled: newEnabled })
-
         });
-
         const data = await res.json();
-
         if (res.ok) {
-
           updateSyncUiState(newEnabled, data.sync_state);
-
           const statusBanner = document.getElementById("threat-sync-status");
-
-          statusBanner.style.display = "block";
-
-          if (newEnabled) {
-
-            statusBanner.style.background = "rgba(16, 185, 129, 0.15)";
-
-            statusBanner.style.color = "var(--success)";
-
-            statusBanner.style.border = "1px solid rgba(16, 185, 129, 0.3)";
-
-            statusBanner.innerHTML = `&#10003; <strong>Threat Shield Resumed:</strong> AI threat reasoning and address-list / prefix-list sync are now <strong>ACTIVE</strong>.`;
-
-          } else {
-
-            statusBanner.style.background = "rgba(239, 68, 68, 0.15)";
-
-            statusBanner.style.color = "var(--danger)";
-
-            statusBanner.style.border = "1px solid rgba(239, 68, 68, 0.3)";
-
-            statusBanner.innerHTML = `&#9888; <strong>Threat Shield Stopped:</strong> AI threat reasoning and address-list / prefix-list sync are now <strong>PAUSED</strong>.`;
-
+          if (statusBanner) {
+            statusBanner.style.display = "block";
+            if (newEnabled) {
+              statusBanner.style.background = "rgba(16, 185, 129, 0.15)";
+              statusBanner.style.color = "var(--success)";
+              statusBanner.style.border = "1px solid rgba(16, 185, 129, 0.3)";
+              statusBanner.innerHTML = `&#10003; <strong>Threat Shield Resumed:</strong> AI threat reasoning and address-list / prefix-list sync are now <strong>ACTIVE</strong>.`;
+            } else {
+              statusBanner.style.background = "rgba(239, 68, 68, 0.15)";
+              statusBanner.style.color = "var(--danger)";
+              statusBanner.style.border = "1px solid rgba(239, 68, 68, 0.3)";
+              statusBanner.innerHTML = `&#9888; <strong>Threat Shield Stopped:</strong> AI threat reasoning and address-list / prefix-list sync are now <strong>PAUSED</strong>.`;
+            }
           }
-
         } else {
-
-          alert(`Failed to update sync state: ${data.detail || data.message}`);
-
+          alert(`Threat Shield: ${data.detail || data.message || 'Failed to update sync state'}`);
+          if (data.detail && data.detail.includes("AI API keys")) {
+            openAIKeysModal();
+          }
         }
-
       } catch (err) {
-
         alert(`Error toggling sync: ${err.message}`);
-
       } finally {
-
         if (toggleBtn) toggleBtn.disabled = false;
-
         loadThreatData();
-
       }
 
     }
@@ -4464,6 +4469,7 @@ let authToken = localStorage.getItem("nat_ai_token");
         });
         const data = await res.json();
         const keys = data.keys || [];
+        window.hasAiApiKeys = (keys.length > 0);
 
         if (badgeCount) {
           badgeCount.innerText = `${keys.length} POOLED`;
@@ -4577,6 +4583,7 @@ let authToken = localStorage.getItem("nat_ai_token");
           if (nameInput) nameInput.value = "";
           if (tokenInput) tokenInput.value = "";
           loadAIKeys();
+          if (typeof loadThreatData === 'function') loadThreatData();
           alert("Key added to encrypted vault successfully!");
         } else {
           const err = await res.json();
@@ -4646,6 +4653,7 @@ let authToken = localStorage.getItem("nat_ai_token");
         });
         if (res.ok) {
           loadAIKeys();
+          if (typeof loadThreatData === 'function') loadThreatData();
         } else {
           const err = await res.json();
           alert(`Error deleting key: ${err.detail || 'Failed'}`);
@@ -4656,6 +4664,12 @@ let authToken = localStorage.getItem("nat_ai_token");
     }
 
     async function triggerManualAIScan() {
+      if (window.hasAiApiKeys === false) {
+        alert("Cannot run AI Threat Scan: No active Gemini AI API keys configured.\n\nCloud AI reasoning requires at least one API key.\nPlease add an AI key in System Management > AI Keys, or add threat rules manually using '+ Add Threat Rule'.");
+        openAIKeysModal();
+        return;
+      }
+
       const btn = document.getElementById("btn-sync-mikrotik");
       if (btn) {
         btn.disabled = true;
@@ -4668,14 +4682,21 @@ let authToken = localStorage.getItem("nat_ai_token");
           headers: token ? { "Authorization": `Bearer ${token}` } : {}
         });
         const data = await res.json();
-        alert("AI Threat Scan completed successfully! Refreshing dashboard.");
-        loadThreatData();
+        if (res.ok) {
+          alert("AI Threat Scan completed successfully! Refreshing dashboard.");
+          loadThreatData();
+        } else {
+          alert(`AI scan: ${data.detail || 'Execution failed'}`);
+          if (data.detail && data.detail.includes("AI API keys")) {
+            openAIKeysModal();
+          }
+        }
       } catch (err) {
         alert(`AI scan error: ${err.message}`);
       } finally {
         if (btn) {
           btn.disabled = false;
-          btn.innerHTML = "&#9889; Sync Threats";
+          btn.innerHTML = "&#9889; Run AI Scan Now";
         }
       }
     }

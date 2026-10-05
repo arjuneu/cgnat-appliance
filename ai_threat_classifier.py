@@ -52,7 +52,26 @@ logging.basicConfig(
 logger = logging.getLogger("ai_threat_classifier")
 
 # Router & Storage Settings
-MIKROTIK_IP = os.getenv("MIKROTIK_IP", "192.0.2.1")
+def _get_default_router_ip() -> str:
+    env_ip = os.getenv("MIKROTIK_IP", "").strip()
+    if env_ip and not env_ip.startswith("192.0.2."):
+        return env_ip
+    try:
+        from router_registry import router_registry
+        adapters = router_registry.get_adapters(enabled_only=True)
+        if adapters:
+            return adapters[0].ip
+    except Exception:
+        pass
+    try:
+        cfg_ip = getattr(config, "MIKROTIK_IP", "")
+        if cfg_ip and not cfg_ip.startswith("192.0.2."):
+            return cfg_ip
+    except Exception:
+        pass
+    return "100.100.48.26"
+
+MIKROTIK_IP = _get_default_router_ip()
 ADDRESS_LIST_NAME = os.getenv("MIKROTIK_ADDRESS_LIST", "scanner")
 
 CLICKHOUSE_HOST = os.getenv("CLICKHOUSE_HOST", "127.0.0.1")
@@ -73,15 +92,23 @@ DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", _vault_disc or getattr(co
 LATEST_THREATS_FILE = os.getenv("LATEST_THREATS_FILE", "/opt/nat-ai-agent/data/latest_ai_threats.json")
 
 # Protected ISP Whitelist (Strictly Immune from Blocking)
-PROTECTED_NETWORKS = [
-    ipaddress.ip_network("203.0.113.0/24"),    # ISP Public Pool Placeholder
-    ipaddress.ip_network("100.64.0.0/10"),     # CGNAT Private Pool
-    ipaddress.ip_network("198.51.100.0/24"),   # Infrastructure Placeholder
-    ipaddress.ip_network("10.0.0.0/8"),        # RFC1918 Private
-    ipaddress.ip_network("172.16.0.0/12"),     # RFC1918 Private
-    ipaddress.ip_network("192.168.0.0/16"),    # RFC1918 Private
-    ipaddress.ip_network("127.0.0.0/8"),       # Loopback
-]
+def _build_protected_networks() -> List[ipaddress.IPv4Network]:
+    nets = [
+        ipaddress.ip_network("10.0.0.0/8"),
+        ipaddress.ip_network("172.16.0.0/12"),
+        ipaddress.ip_network("192.168.0.0/16"),
+        ipaddress.ip_network("127.0.0.0/8"),
+        ipaddress.ip_network("100.100.48.0/22"),
+    ]
+    for pool in getattr(config, "ISP_PUBLIC_POOLS", ["103.155.20.0/23"]):
+        try: nets.append(ipaddress.ip_network(pool.strip()))
+        except Exception: pass
+    for pool in getattr(config, "CGNAT_POOLS", ["100.64.0.0/10"]):
+        try: nets.append(ipaddress.ip_network(pool.strip()))
+        except Exception: pass
+    return nets
+
+PROTECTED_NETWORKS = _build_protected_networks()
 
 GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-flash-lite-latest", "gemini-3.8-flash"]
 
@@ -201,7 +228,7 @@ def seed_cache_from_router_if_empty():
 
 # 1. ClickHouse Candidate Extraction (High-Speed Pre-Aggregation)
 # ==============================================================================
-def extract_candidate_threats(hours: float = 0.5, router_ip: str = MIKROTIK_IP, limit: int = 40) -> List[Dict[str, Any]]:
+def extract_candidate_threats(hours: float = 0.5, router_ip: Optional[str] = None, limit: int = 40) -> List[Dict[str, Any]]:
     """Extracts top destination subnet & IP candidate clusters with rich traffic vectors."""
     try:
         import clickhouse_connect
@@ -214,7 +241,10 @@ def extract_candidate_threats(hours: float = 0.5, router_ip: str = MIKROTIK_IP, 
         return []
 
     interval_minutes = int(hours * 60) if hours < 1 else int(hours * 60)
-    logger.info(f"Aggregating destination traffic clusters from router {router_ip} (Window: {interval_minutes} minutes)...")
+    router_label = router_ip if (router_ip and router_ip != "all") else "All Fleet Routers"
+    logger.info(f"Aggregating destination traffic clusters from router {router_label} (Window: {interval_minutes} minutes)...")
+
+    router_clause = f"AND router_ip = '{router_ip}'" if (router_ip and router_ip != "all") else ""
     
     # High-Speed 2-Step Subquery (0.2s for 15-30m window)
     sql_subnets = f"""
@@ -223,10 +253,10 @@ def extract_candidate_threats(hours: float = 0.5, router_ip: str = MIKROTIK_IP, 
             bitAnd(toUInt32(dst_ip), 4294967040) as subnet_int
         FROM {CLICKHOUSE_DB}.translations
         WHERE toDate(timestamp) >= today() - 1 AND timestamp >= now() - INTERVAL {interval_minutes} MINUTE
-          AND router_ip = '{router_ip}'
-          AND NOT (dst_ip >= IPv4StringToNum('203.0.113.0') AND dst_ip <= IPv4StringToNum('203.0.113.255'))
+          {router_clause}
+          AND NOT (dst_ip >= IPv4StringToNum('103.155.20.0') AND dst_ip <= IPv4StringToNum('103.155.21.255'))
           AND NOT (dst_ip >= IPv4StringToNum('100.64.0.0') AND dst_ip <= IPv4StringToNum('100.127.255.255'))
-          AND NOT (dst_ip >= IPv4StringToNum('198.51.100.0') AND dst_ip <= IPv4StringToNum('198.51.100.255'))
+          AND NOT (dst_ip >= IPv4StringToNum('100.100.48.0') AND dst_ip <= IPv4StringToNum('100.100.51.255'))
           AND NOT (dst_ip >= IPv4StringToNum('10.0.0.0') AND dst_ip <= IPv4StringToNum('10.255.255.255'))
         GROUP BY subnet_int
         ORDER BY count() DESC
@@ -242,14 +272,15 @@ def extract_candidate_threats(hours: float = 0.5, router_ip: str = MIKROTIK_IP, 
         topK(5)(dst_port) as sample_ports,
         topK(2)(protocol) as protocols,
         min(timestamp) as first_seen,
-        max(timestamp) as last_seen
+        max(timestamp) as last_seen,
+        topK(1)(router_ip)[1] as origin_router
     FROM {CLICKHOUSE_DB}.translations
     WHERE toDate(timestamp) >= today() - 1 AND timestamp >= now() - INTERVAL {interval_minutes} MINUTE
-      AND router_ip = '{router_ip}'
+      {router_clause}
       AND bitAnd(toUInt32(dst_ip), 4294967040) IN (SELECT subnet_int FROM top_subnets)
     GROUP BY subnet_cidr
     ORDER BY total_flows DESC
-    SETTINGS max_threads = 8, max_execution_time = 30;
+    SETTINGS max_threads = 8, max_execution_time = 60;
     """
     
     rows = client.query(sql_subnets).result_rows
@@ -269,10 +300,11 @@ def extract_candidate_threats(hours: float = 0.5, router_ip: str = MIKROTIK_IP, 
             skipped_already_blocked += 1
             continue
             
+        origin_ip = str(r[10]) if len(r) > 10 and r[10] else (router_ip or MIKROTIK_IP)
         candidates.append({
             "target": cidr,
             "target_type": "SUBNET_24",
-            "origin_router_ip": router_ip,
+            "origin_router_ip": origin_ip,
             "total_flows": int(r[1]),
             "distinct_host_ips": int(r[2]),
             "host_saturation_pct": round((int(r[2]) / 256.0) * 100, 1),
@@ -661,6 +693,7 @@ def main():
     parser.add_argument("hours_pos", type=float, nargs="?", default=None, help="Positional window in hours")
     parser.add_argument("--hours", type=float, default=None, help="Analysis window in hours (default: 0.25 = 15m)")
     parser.add_argument("--limit", type=int, default=30, help="Max candidate clusters to analyze (default: 30)")
+    parser.add_argument("--router", type=str, default=None, help="Filter to specific router IP or 'all' for fleet-wide (default: all)")
     parser.add_argument("--apply", action="store_true", default=False, help="Apply changes to router fleet")
     parser.add_argument("--discord", action="store_true", default=False, help="Send report to Discord")
     parser.add_argument("--force", action="store_true", default=False, help="Force AI evaluation and sync even if Threat Shield is paused")
@@ -681,13 +714,14 @@ def main():
         logger.info("Threat Shield is STOPPED (Paused). Skipping AI reasoning and router sync cycle.")
         return
 
+    router_scope_label = args.router if args.router else "ALL FLEET ROUTERS (Aggregated)"
     print("=" * 85)
     print("🚀 ANTIGRAVITY AI THREAT CLASSIFIER (15-MIN REAL-TIME / 3-AM ENGINE)")
-    print(f"Window: {analysis_hours}h ({int(analysis_hours*60)}m) | Mode: {'ACTIVE APPLY' if apply_mode else 'DRY RUN'} | Force: {args.force}")
+    print(f"Scope: {router_scope_label} | Window: {analysis_hours}h ({int(analysis_hours*60)}m) | Mode: {'ACTIVE APPLY' if apply_mode else 'DRY RUN'} | Force: {args.force}")
     print("=" * 85)
 
     # 1. ClickHouse Extraction
-    candidates = extract_candidate_threats(hours=analysis_hours, limit=args.limit)
+    candidates = extract_candidate_threats(hours=analysis_hours, router_ip=args.router, limit=args.limit)
     if not candidates:
         print("No suspicious candidate clusters found in time window.")
         return

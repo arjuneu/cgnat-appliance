@@ -4790,6 +4790,7 @@ let authToken = localStorage.getItem("nat_ai_token");
         }
 
         tbody.innerHTML = routers.map(r => {
+          const routerIp = r.router_ip || r.ip || "";
           const isOnline = r.status === "online" || r.status === "active";
           const statusBadge = isOnline ? '<span class="badge-tag green">Online</span>' : '<span class="badge-tag danger">Offline</span>';
           const syncBadge = r.sync_enabled !== false ? '<span class="badge-tag green" style="font-size:9px; padding:2px 5px;">SYNC ON</span>' : '<span class="badge-tag" style="background:rgba(255,255,255,0.06); color:var(--text-dim); font-size:9px; padding:2px 5px;">SYNC OFF</span>';
@@ -4805,7 +4806,7 @@ let authToken = localStorage.getItem("nat_ai_token");
             <tr>
               <td>
                 <strong style="color:var(--text-bright); font-size:13px;">${routerDisplayName}</strong><br>
-                <span style="color:var(--text-dim); font-size:11px; font-family:monospace;">${r.router_ip}</span>
+                <span style="color:var(--text-dim); font-size:11px; font-family:monospace;">${routerIp}</span>
               </td>
               <td><span class="${vendorBadgeClass}">${vendorTag.toUpperCase()}</span></td>
               <td><code>${r.port || 22}</code></td>
@@ -4814,9 +4815,9 @@ let authToken = localStorage.getItem("nat_ai_token");
               <td>${syncBadge}</td>
               <td>${statusBadge}</td>
               <td style="text-align:right; white-space:nowrap;">
-                <button class="btn-refresh" onclick="testRouterConnection('${r.router_ip}')" style="padding:3px 8px; font-size:11px;" title="Test Live SSH">&#9889; Test</button>
-                <button class="btn-refresh" onclick="editRouterEntry('${r.router_ip}', '${escape(r.name || '')}', '${r.vendor || 'mikrotik'}', ${r.port || 22}, '${r.username || 'natlog'}', '${r.address_list || 'scanner'}', ${r.sync_enabled !== false})" style="padding:3px 7px; font-size:11px;" title="Edit Router">&#9998;</button>
-                <button class="btn-refresh" onclick="deleteRouterEntry('${r.router_ip}')" style="color:#f87171; padding:3px 7px; font-size:11px;" title="Delete Router">&#128465;</button>
+                <button class="btn-refresh" onclick="testRouterConnection('${routerIp}')" style="padding:3px 8px; font-size:11px;" title="Test Live SSH">&#9889; Test</button>
+                <button class="btn-refresh" onclick="editRouterEntry('${routerIp}', '${escape(r.name || '')}', '${r.vendor || 'mikrotik'}', ${r.port || 22}, '${r.username || 'natlog'}', '${r.address_list || 'scanner'}', ${r.sync_enabled !== false})" style="padding:3px 7px; font-size:11px;" title="Edit Router">&#9998;</button>
+                <button class="btn-refresh" onclick="deleteRouterEntry('${routerIp}')" style="color:#f87171; padding:3px 7px; font-size:11px;" title="Delete Router">&#128465;</button>
               </td>
             </tr>
           `;

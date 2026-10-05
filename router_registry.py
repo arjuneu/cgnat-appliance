@@ -59,6 +59,10 @@ class RouterRegistry:
             r_copy["router_id"] = router_id
             
             # Normalize fields
+            ip = r_copy.get("ip") or r_copy.get("router_ip", "")
+            r_copy["ip"] = ip
+            r_copy["router_ip"] = ip
+            r_copy["status"] = r_copy.get("status", "online")
             r_copy["vendor"] = r_copy.get("vendor", "mikrotik").lower()
             r_copy["role"] = r_copy.get("role", "cgnat")
             default_list = r_copy.get("address_list") or ("THREAT-SHIELD-PREFIXES" if r_copy["vendor"] == "juniper" else "scanner")
@@ -94,7 +98,7 @@ class RouterRegistry:
                 return r
         return None
 
-    def add_router(self, router_data: Dict[str, Any]) -> Tuple[bool, str]:
+    def add_router(self, router_data: Dict[str, Any], allow_update: bool = True) -> Tuple[bool, str]:
         routers = self._read_routers()
         ip = router_data.get("ip") or router_data.get("router_ip", "")
         router_data["ip"] = ip
@@ -103,7 +107,10 @@ class RouterRegistry:
             router_id = ip.replace(".", "_")
         
         for r in routers:
-            if r.get("router_id") == router_id or r.get("ip") == ip:
+            if r.get("router_id") == router_id or r.get("ip") == ip or r.get("router_ip") == ip:
+                if allow_update:
+                    target_id = r.get("router_id") or router_id
+                    return self.update_router(target_id, router_data)
                 return False, f"Router with ID '{router_id}' or IP '{ip}' already exists"
 
         password = router_data.pop("password", None)

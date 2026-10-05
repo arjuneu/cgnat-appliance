@@ -294,7 +294,7 @@ class ThreatShieldEngine:
         # 2. Horizontal /24 Subnet Sweep query
         sql_subnet = f"""
         SELECT
-            concat(cutIPv4(dst_ip, 3), '.0') AS subnet_base,
+            concat(toString(IPv4NumToString(bitAnd(toUInt32(dst_ip), 4294967040))), '/24') AS subnet_cidr,
             count() AS total_flows,
             uniqExact(dst_ip) AS distinct_target_hosts,
             uniqExact(src_ip) AS distinct_subscribers,
@@ -302,23 +302,22 @@ class ThreatShieldEngine:
         FROM nat_logs.translations
         WHERE timestamp >= now() - INTERVAL %(minutes)s MINUTE
           {router_clause}
-        GROUP BY subnet_base
+        GROUP BY subnet_cidr
         HAVING distinct_target_hosts >= {subnet_min_hosts}
            AND distinct_subscribers <= {max_subscribers}
            AND total_flows >= {subnet_min_flows}
-        ORDER BY flow_count DESC
+        ORDER BY total_flows DESC
         LIMIT 50
         """
         res_subnet = client.query(sql_subnet, parameters=params)
         subnet_sweeps = []
 
         for row in res_subnet.result_rows:
-            base_ip = str(row[0])
+            cidr = str(row[0])
             flows = int(row[1])
             hosts = int(row[2])
             subs = int(row[3])
             ports = int(row[4])
-            cidr = f"{base_ip}/24"
 
             if is_whitelisted(cidr):
                 continue

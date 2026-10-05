@@ -1821,7 +1821,11 @@ def get_ai_threat_feed(user_payload: Dict[str, Any] = Depends(get_current_user))
         raise HTTPException(status_code=500, detail=f"Failed to read AI threat feed: {str(e)}")
 
 @app.post("/api/v1/threats/sync/daily")
-def trigger_daily_ai_sync(hours: float = 24.0, user_payload: Dict[str, Any] = Depends(require_operator)):
+def trigger_daily_ai_sync(
+    hours: float = 24.0,
+    router_id: Optional[str] = Query("all"),
+    user_payload: Dict[str, Any] = Depends(require_operator)
+):
     has_keys = False
     try:
         from ai_key_vault import key_vault
@@ -1840,17 +1844,20 @@ def trigger_daily_ai_sync(hours: float = 24.0, user_payload: Dict[str, Any] = De
 
     try:
         import subprocess
+        cmd = ["/opt/nat-ai-agent/venv/bin/python3", "/opt/nat-ai-agent/ai_threat_classifier.py", str(hours), "--apply", "--discord"]
+        if router_id and router_id != "all":
+            cmd.extend(["--router", router_id])
         res = subprocess.run(
-            ["/opt/nat-ai-agent/venv/bin/python3", "/opt/nat-ai-agent/ai_threat_classifier.py", str(hours)],
+            cmd,
             capture_output=True,
             text=True,
-            timeout=120
+            timeout=180
         )
         return {
             "status": "ok",
             "message": "AI Threat Classification completed",
-            "stdout": res.stdout[-300:],
-            "stderr": res.stderr[-300:] if res.stderr else ""
+            "stdout": res.stdout[-400:],
+            "stderr": res.stderr[-400:] if res.stderr else ""
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI Scan execution error: {str(e)}")

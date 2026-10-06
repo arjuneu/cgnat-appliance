@@ -241,10 +241,25 @@ def extract_candidate_threats(hours: float = 0.5, router_ip: Optional[str] = Non
         return []
 
     interval_minutes = int(hours * 60) if hours < 1 else int(hours * 60)
-    router_label = router_ip if (router_ip and router_ip != "all") else "All Fleet Routers"
-    logger.info(f"Aggregating destination traffic clusters from router {router_label} (Window: {interval_minutes} minutes)...")
+    managed_ips = []
+    try:
+        from router_registry import router_registry
+        managed_ips = [a.ip for a in router_registry.get_adapters(enabled_only=True) if getattr(a, "ip", None)]
+    except Exception as e:
+        logger.warning(f"Could not load managed routers: {e}")
 
-    router_clause = f"AND router_ip = '{router_ip}'" if (router_ip and router_ip != "all") else ""
+    if router_ip and router_ip != "all":
+        router_clause = f"AND router_ip = '{router_ip}'"
+        router_label = f"Router {router_ip}"
+    elif managed_ips:
+        quoted_ips = ", ".join(f"'{ip}'" for ip in managed_ips)
+        router_clause = f"AND router_ip IN ({quoted_ips})"
+        router_label = f"Managed Routers ({', '.join(managed_ips)})"
+    else:
+        router_clause = ""
+        router_label = "All Fleet Routers"
+
+    logger.info(f"Aggregating destination traffic clusters from {router_label} (Window: {interval_minutes} minutes)...")
     
     # High-Speed 2-Step Subquery (0.2s for 15-30m window)
     sql_subnets = f"""
@@ -553,7 +568,8 @@ def apply_verdicts_to_mikrotik(verdicts: List[Dict[str, Any]], dry_run: bool = T
                 if adapter and getattr(adapter, "sync_enabled", True):
                     target_adapters = [adapter]
                 else:
-                    target_adapters = all_enabled_adapters
+                    logger.warning(f"[ORIGINATING SCOPE] Origin router '{origin_ip}' is not configured in Router Management (or sync is disabled). Skipping automated block to prevent cross-router leak.")
+                    target_adapters = []
             elif enforcement_scope == "hybrid":
                 is_severe_sweep = (
                     "BOTNET" in threat_type.upper() or 
@@ -570,7 +586,8 @@ def apply_verdicts_to_mikrotik(verdicts: List[Dict[str, Any]], dry_run: bool = T
                     if adapter and getattr(adapter, "sync_enabled", True):
                         target_adapters = [adapter]
                     else:
-                        target_adapters = all_enabled_adapters
+                        logger.warning(f"[HYBRID SCOPE] Origin router '{origin_ip}' is not managed. Skipping local block.")
+                        target_adapters = []
             else:  # fleet_wide
                 target_adapters = all_enabled_adapters
 

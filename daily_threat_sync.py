@@ -10,7 +10,10 @@ import urllib.request
 from collections import defaultdict
 from typing import Dict, List, Tuple, Any, Optional
 import clickhouse_connect
-import mikrotik_sync
+try:
+    import router_sync as mikrotik_sync
+except ImportError:
+    import mikrotik_sync
 
 import config
 

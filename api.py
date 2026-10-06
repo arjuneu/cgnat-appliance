@@ -716,12 +716,15 @@ def health():
 # -------------------------------------------------------------
 
 try:
-
-    import mikrotik_sync
-
+    import router_sync
+    mikrotik_sync = router_sync
 except ImportError:
-
-    mikrotik_sync = None
+    try:
+        import mikrotik_sync
+        router_sync = mikrotik_sync
+    except ImportError:
+        router_sync = None
+        mikrotik_sync = None
 
 
 

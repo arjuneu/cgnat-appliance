@@ -69,7 +69,7 @@ def _get_default_router_ip() -> str:
             return cfg_ip
     except Exception:
         pass
-    return "100.100.48.26"
+    return "192.0.2.1"
 
 MIKROTIK_IP = _get_default_router_ip()
 ADDRESS_LIST_NAME = os.getenv("MIKROTIK_ADDRESS_LIST", "scanner")
@@ -98,14 +98,25 @@ def _build_protected_networks() -> List[ipaddress.IPv4Network]:
         ipaddress.ip_network("172.16.0.0/12"),
         ipaddress.ip_network("192.168.0.0/16"),
         ipaddress.ip_network("127.0.0.0/8"),
-        ipaddress.ip_network("100.100.48.0/22"),
+        ipaddress.ip_network("100.64.0.0/10"),
     ]
-    for pool in getattr(config, "ISP_PUBLIC_POOLS", ["103.155.20.0/23"]):
-        try: nets.append(ipaddress.ip_network(pool.strip()))
-        except Exception: pass
-    for pool in getattr(config, "CGNAT_POOLS", ["100.64.0.0/10"]):
-        try: nets.append(ipaddress.ip_network(pool.strip()))
-        except Exception: pass
+    for pool in getattr(config, "ISP_PUBLIC_POOLS", []):
+        try:
+            if pool and not pool.startswith("203.0.113."):
+                nets.append(ipaddress.ip_network(pool.strip()))
+        except Exception:
+            pass
+    mgmt_pools = os.getenv("INTERNAL_MANAGEMENT_NETWORKS", "")
+    for pool in [x.strip() for x in mgmt_pools.split(",") if x.strip()]:
+        try:
+            nets.append(ipaddress.ip_network(pool))
+        except Exception:
+            pass
+    for pool in getattr(config, "CGNAT_POOLS", []):
+        try:
+            nets.append(ipaddress.ip_network(pool.strip()))
+        except Exception:
+            pass
     return nets
 
 PROTECTED_NETWORKS = _build_protected_networks()
@@ -261,6 +272,29 @@ def extract_candidate_threats(hours: float = 0.5, router_ip: Optional[str] = Non
 
     logger.info(f"Aggregating destination traffic clusters from {router_label} (Window: {interval_minutes} minutes)...")
     
+    # Dynamic RFC 1918 / RFC 6598 + Configured Protected Subnets exclusions for ClickHouse
+    sql_exclusions = [
+        "AND NOT (dst_ip >= IPv4StringToNum('100.64.0.0') AND dst_ip <= IPv4StringToNum('100.127.255.255'))",
+        "AND NOT (dst_ip >= IPv4StringToNum('10.0.0.0') AND dst_ip <= IPv4StringToNum('10.255.255.255'))",
+        "AND NOT (dst_ip >= IPv4StringToNum('172.16.0.0') AND dst_ip <= IPv4StringToNum('172.31.255.255'))",
+        "AND NOT (dst_ip >= IPv4StringToNum('192.168.0.0') AND dst_ip <= IPv4StringToNum('192.168.255.255'))",
+    ]
+    for pool in getattr(config, "ISP_PUBLIC_POOLS", []):
+        try:
+            if pool and not pool.startswith("203.0.113."):
+                net = ipaddress.ip_network(pool.strip())
+                sql_exclusions.append(f"AND NOT (dst_ip >= IPv4StringToNum('{net.network_address}') AND dst_ip <= IPv4StringToNum('{net.broadcast_address}'))")
+        except Exception:
+            pass
+    mgmt_pools = os.getenv("INTERNAL_MANAGEMENT_NETWORKS", "")
+    for pool in [x.strip() for x in mgmt_pools.split(",") if x.strip()]:
+        try:
+            net = ipaddress.ip_network(pool)
+            sql_exclusions.append(f"AND NOT (dst_ip >= IPv4StringToNum('{net.network_address}') AND dst_ip <= IPv4StringToNum('{net.broadcast_address}'))")
+        except Exception:
+            pass
+    exclusions_clause = "\n          ".join(sql_exclusions)
+
     # High-Speed 2-Step Subquery (0.2s for 15-30m window)
     sql_subnets = f"""
     WITH top_subnets AS (
@@ -269,10 +303,7 @@ def extract_candidate_threats(hours: float = 0.5, router_ip: Optional[str] = Non
         FROM {CLICKHOUSE_DB}.translations
         WHERE toDate(timestamp) >= today() - 1 AND timestamp >= now() - INTERVAL {interval_minutes} MINUTE
           {router_clause}
-          AND NOT (dst_ip >= IPv4StringToNum('103.155.20.0') AND dst_ip <= IPv4StringToNum('103.155.21.255'))
-          AND NOT (dst_ip >= IPv4StringToNum('100.64.0.0') AND dst_ip <= IPv4StringToNum('100.127.255.255'))
-          AND NOT (dst_ip >= IPv4StringToNum('100.100.48.0') AND dst_ip <= IPv4StringToNum('100.100.51.255'))
-          AND NOT (dst_ip >= IPv4StringToNum('10.0.0.0') AND dst_ip <= IPv4StringToNum('10.255.255.255'))
+          {exclusions_clause}
         GROUP BY subnet_int
         ORDER BY count() DESC
         LIMIT {limit}

@@ -641,15 +641,25 @@ def apply_verdicts_to_mikrotik(verdicts: List[Dict[str, Any]], dry_run: bool = T
 
 # 5. Threat Shield Real-Time State# 5. Threat Shield Real-Time State & Discord Reporting
 # ==============================================================================
-def save_latest_threat_stream(verdicts: List[Dict[str, Any]], account_used: str, window_minutes: int):
+def save_latest_threat_stream(verdicts: List[Dict[str, Any]], account_used: str, window_minutes: int, router_scope: Optional[str] = None):
     """Saves the latest 15-minute AI threat evaluations for Threat Shield Web UI display."""
     try:
         os.makedirs(os.path.dirname(LATEST_THREATS_FILE) or ".", exist_ok=True)
+        if router_scope and router_scope != "all":
+            reported_router = router_scope
+        else:
+            try:
+                from router_registry import router_registry
+                managed_ips = [a.ip for a in router_registry.get_adapters(enabled_only=True) if getattr(a, "ip", None)]
+                reported_router = ", ".join(managed_ips) if managed_ips else MIKROTIK_IP
+            except Exception:
+                reported_router = MIKROTIK_IP
+
         data = {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "window_minutes": window_minutes,
             "account_used": account_used,
-            "router_ip": MIKROTIK_IP,
+            "router_ip": reported_router,
             "total_evaluated": len(verdicts),
             "blocked_count": sum(1 for v in verdicts if v.get("action") == "BLOCK"),
             "allowed_count": sum(1 for v in verdicts if v.get("action") == "ALLOW"),
@@ -662,7 +672,7 @@ def save_latest_threat_stream(verdicts: List[Dict[str, Any]], account_used: str,
     except Exception as e:
         logger.error(f"Failed to save latest threat stream: {e}")
 
-def send_discord_ai_report(verdicts: List[Dict[str, Any]], account_used: str, dry_run: bool = True) -> bool:
+def send_discord_ai_report(verdicts: List[Dict[str, Any]], account_used: str, dry_run: bool = True, router_scope: Optional[str] = None) -> bool:
     """Delivers rich AI threat intelligence report to Discord operations channel."""
     if not DISCORD_WEBHOOK_URL:
         return False
@@ -675,6 +685,19 @@ def send_discord_ai_report(verdicts: List[Dict[str, Any]], account_used: str, dr
     enforcement_scope = get_threat_config().get("enforcement_scope", "fleet_wide")
     scope_display = scope_map.get(enforcement_scope, "🌐 All Fleet Routers")
 
+    # Determine accurate router scope text for Discord header
+    if router_scope and router_scope != "all":
+        router_desc = f"router `{router_scope}`"
+    else:
+        try:
+            from router_registry import router_registry
+            managed_ips = [a.ip for a in router_registry.get_adapters(enabled_only=True) if getattr(a, "ip", None)]
+            if managed_ips:
+                router_desc = f"Managed Routers (`{', '.join(managed_ips)}`)"
+            else:
+                router_desc = "All Fleet Routers"
+        except Exception:
+            router_desc = "All Fleet Routers"
 
     blocks = [v for v in verdicts if v.get("action") == "BLOCK"]
     allows = [v for v in verdicts if v.get("action") == "ALLOW"]
@@ -703,7 +726,7 @@ def send_discord_ai_report(verdicts: List[Dict[str, Any]], account_used: str, dr
         "embeds": [
             {
                 "title": f"🧠 AI Threat Intelligence Report {mode_text}",
-                "description": f"Analyzed real-time destination clusters on router `{MIKROTIK_IP}` using LLM Contextual Reasoning.",
+                "description": f"Analyzed real-time destination clusters on {router_desc} using LLM Contextual Reasoning.",
                 "color": 15158332 if blocks else (15844367 if monitored else 3066993),
                 "fields": [
                     {"name": "Enforcement Scope", "value": f"`{scope_display}`", "inline": True},
@@ -781,7 +804,7 @@ def main():
     verdicts, account_used = evaluate_threats_with_ai(enriched)
 
     # 4. Save Stream for Threat Shield UI
-    save_latest_threat_stream(verdicts, account_used=account_used, window_minutes=int(analysis_hours*60))
+    save_latest_threat_stream(verdicts, account_used=account_used, window_minutes=int(analysis_hours*60), router_scope=args.router)
 
     # 5. Display Results
     print("\n" + "=" * 105)
@@ -801,7 +824,7 @@ def main():
 
     # 7. Discord Alert
     if discord_mode:
-        send_discord_ai_report(verdicts, account_used=account_used, dry_run=not apply_mode)
+        send_discord_ai_report(verdicts, account_used=account_used, dry_run=not apply_mode, router_scope=args.router)
 
 if __name__ == '__main__':
     main()

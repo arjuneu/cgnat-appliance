@@ -726,7 +726,7 @@
   </div>
 
   <!-- Active Router Fleet Blocklist Modal -->
-  <div id="modal-view-blocklist" class="modal-overlay" style="display: none;">
+  <div id="modal-view-blocklist" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(10, 14, 23, 0.88); backdrop-filter: blur(8px); z-index: 9999; justify-content: center; align-items: center;">
     <div class="modal-box" style="width: 1050px; max-width: 95vw; max-height: 88vh; display: flex; flex-direction: column;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <div style="display: flex; align-items: center; gap: 10px;">
@@ -773,7 +773,7 @@
   </div>
 
   <!-- Threat Shield Whitelist / Protected Services Modal -->
-  <div id="modal-view-whitelist" class="modal-overlay" style="display: none;">
+  <div id="modal-view-whitelist" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(10, 14, 23, 0.88); backdrop-filter: blur(8px); z-index: 9999; justify-content: center; align-items: center;">
     <div class="modal-box" style="width: 1100px; max-width: 95vw; max-height: 88vh; display: flex; flex-direction: column;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <div style="display: flex; align-items: center; gap: 10px;">
@@ -8444,7 +8444,230 @@
 
 
 
-    <script src="/static/js/app.js?v=2026100201"></script>
+    <script src="/static/js/app.js?v=20261012_113000"></script>
+
+
+<script>
+// ============================================================
+// THREAT SHIELD MODALS & DIRECT ENGINE CONTROLLER (FAIL-SAFE)
+// ============================================================
+function openActiveBlocklistModal() {
+  const m = document.getElementById("modal-view-blocklist");
+  if (m) {
+    m.style.display = "flex";
+    const inp = document.getElementById("search-active-blocklist");
+    if (inp) inp.focus();
+  }
+  syncActiveBlocklistUI();
+}
+
+function closeActiveBlocklistModal() {
+  const m = document.getElementById("modal-view-blocklist");
+  if (m) m.style.display = "none";
+}
+
+function openViewWhitelistModal() {
+  const m = document.getElementById("modal-view-whitelist");
+  if (m) {
+    m.style.display = "flex";
+    const inp = document.getElementById("search-threat-whitelist");
+    if (inp) inp.focus();
+  }
+  syncWhitelistUI();
+}
+
+function closeViewWhitelistModal() {
+  const m = document.getElementById("modal-view-whitelist");
+  if (m) m.style.display = "none";
+}
+
+async function syncActiveBlocklistUI() {
+  const token = (typeof authToken !== 'undefined' && authToken) || localStorage.getItem('nat_ai_token');
+  if (!token) return;
+  const routerId = (typeof selectedThreatRouter !== 'undefined' && selectedThreatRouter) || 'all';
+  try {
+    const res = await fetch(`/api/v1/threats/fleet-list?router_id=${encodeURIComponent(routerId)}`, {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const entries = data.entries || [];
+    window.currentRawMikrotikEntries = entries;
+    
+    const badge = document.getElementById("top-blocklist-badge");
+    if (badge) badge.innerText = entries.length;
+    const mBadge = document.getElementById("modal-blocklist-count");
+    if (mBadge) mBadge.innerText = `${entries.length} Rules`;
+    
+    renderBlocklistRows(entries);
+  } catch (e) {
+    console.warn("syncActiveBlocklistUI error:", e);
+  }
+}
+
+function renderBlocklistRows(entries) {
+  const tbody = document.getElementById("tbody-mikrotik-entries");
+  if (!tbody) return;
+  if (!entries || !entries.length) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-dim); padding: 24px;">No active threat block rules on selected router / fleet.</td></tr>`;
+    return;
+  }
+  let html = "";
+  entries.forEach(item => {
+    const addr = item.address || "";
+    const comment = item.comment || item.list || "";
+    const creation = item.creation_time || "--";
+    const routerIp = item.router_ip || "Fleet";
+    const vendor = item.vendor || "mikrotik";
+    const vendorBadge = vendor === "juniper" ? `<span class="badge-tag purple" style="font-size: 10px; padding: 2px 6px;">⚡ Juniper Junos</span>` : `<span class="badge-tag cyan" style="font-size: 10px; padding: 2px 6px;">🛡️ MikroTik</span>`;
+
+    html += `
+      <tr>
+        <td>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span style="font-size: 11.5px; font-weight: 600; color: var(--text-main);">${routerIp}</span>
+            ${vendorBadge}
+          </div>
+        </td>
+        <td><strong style="color: var(--danger); font-family: 'JetBrains Mono', monospace;">${addr}</strong></td>
+        <td style="font-size: 11px; color: var(--text-muted); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${comment}">${comment}</td>
+        <td style="font-size: 11px; color: var(--text-dim);">${creation}</td>
+        <td style="text-align: right;">
+          <div style="display: flex; gap: 4px; justify-content: flex-end;">
+            <button class="btn btn-secondary" style="padding: 2px 6px; font-size: 10px;" onclick="if(typeof drilldownForensics==='function') drilldownForensics('${addr.split('/')[0]}');">&#128269; Forensics</button>
+            <button class="btn btn-secondary" style="padding: 2px 6px; font-size: 10px; color: var(--danger);" onclick="if(typeof removeMikrotikEntry==='function') removeMikrotikEntry('${addr}', '${item.router_id || routerIp}');">&#10005; Remove</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+  tbody.innerHTML = html;
+}
+
+function filterActiveBlocklist() {
+  const inp = document.getElementById("search-active-blocklist");
+  if (!inp) return;
+  const q = inp.value.toLowerCase().trim();
+  const all = window.currentRawMikrotikEntries || [];
+  if (!q) {
+    renderBlocklistRows(all);
+    return;
+  }
+  const filtered = all.filter(item => {
+    const addr = (item.address || "").toLowerCase();
+    const comment = (item.comment || item.list || "").toLowerCase();
+    const rip = (item.router_ip || "").toLowerCase();
+    const vendor = (item.vendor || "").toLowerCase();
+    return addr.includes(q) || comment.includes(q) || rip.includes(q) || vendor.includes(q);
+  });
+  renderBlocklistRows(filtered);
+}
+
+async function syncWhitelistUI() {
+  const token = (typeof authToken !== 'undefined' && authToken) || localStorage.getItem('nat_ai_token');
+  if (!token) return;
+  try {
+    const res = await fetch("/api/v1/threats/whitelist", {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.status === "ok" && data.whitelist) {
+      const entries = Object.values(data.whitelist.entries || {});
+      window.currentWhitelistEntries = entries;
+      const b = document.getElementById("whitelist-count-badge");
+      if (b) b.innerText = `${entries.length} Prefixes`;
+      const topB = document.getElementById("top-whitelist-badge");
+      if (topB) topB.innerText = entries.length;
+      renderWhitelistRows(entries);
+    }
+  } catch (e) {
+    console.warn("syncWhitelistUI error:", e);
+  }
+}
+
+function renderWhitelistRows(entries) {
+  const tbody = document.getElementById("tbody-threat-whitelist");
+  if (!tbody) return;
+  if (!entries || entries.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-dim); padding: 30px;">No whitelisted prefixes found. Click "Add Whitelist Prefix" to protect critical subnets.</td></tr>`;
+    return;
+  }
+  function esc(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  tbody.innerHTML = entries.map(entry => {
+    const target = esc(entry.target || "");
+    const desc = esc(entry.description || "—");
+    const category = esc(entry.category || "General");
+    const asn = esc(entry.asn ? `${entry.asn} ${entry.as_name || ''}`.trim() : "—");
+    const createdAt = esc(entry.created_at || "—");
+
+    let badgeColor = "var(--primary)";
+    if (category.toLowerCase().includes("camera")) badgeColor = "var(--warning)";
+    else if (category.toLowerCase().includes("cloud")) badgeColor = "var(--info, #38bdf8)";
+    else if (category.toLowerCase().includes("social")) badgeColor = "var(--purple, #a855f7)";
+    else if (category.toLowerCase().includes("peering")) badgeColor = "var(--success)";
+
+    return `<tr>
+      <td>
+        <div style="font-family: var(--font-mono, monospace); font-weight: 600; color: var(--text-main); font-size: 12.5px;">${target}</div>
+      </td>
+      <td>
+        <div style="font-weight: 500; color: var(--text-main);">${desc}</div>
+      </td>
+      <td>
+        <span class="badge-tag" style="background: rgba(255,255,255,0.06); color: ${badgeColor}; border: 1px solid ${badgeColor}; font-size: 10.5px; padding: 2px 7px;">${category}</span>
+      </td>
+      <td>
+        <div style="font-size: 11px; color: var(--text-dim); max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${asn}">${asn}</div>
+      </td>
+      <td>
+        <div style="font-size: 11px; color: var(--text-muted);">${createdAt}</div>
+      </td>
+      <td style="text-align: right;">
+        <button class="btn-action secondary" onclick="if(typeof removeThreatWhitelistEntry==='function') removeThreatWhitelistEntry('${entry.target}');" style="padding: 3px 8px; font-size: 11px; color: var(--danger); border-color: rgba(239, 68, 68, 0.4);" title="Remove from whitelist">Remove</button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+function filterThreatWhitelist() {
+  const searchInput = document.getElementById("search-threat-whitelist");
+  if (!searchInput) return;
+  const query = searchInput.value.toLowerCase().trim();
+  const all = window.currentWhitelistEntries || [];
+  if (!query) {
+    renderWhitelistRows(all);
+    return;
+  }
+  const filtered = all.filter(e => {
+    const target = (e.target || "").toLowerCase();
+    const desc = (e.description || "").toLowerCase();
+    const cat = (e.category || "").toLowerCase();
+    const asn = (e.asn || "").toLowerCase();
+    const asName = (e.as_name || "").toLowerCase();
+    return target.includes(query) || desc.includes(query) || cat.includes(query) || asn.includes(query) || asName.includes(query);
+  });
+  renderWhitelistRows(filtered);
+}
+
+// Global exposure
+window.openActiveBlocklistModal = openActiveBlocklistModal;
+window.closeActiveBlocklistModal = closeActiveBlocklistModal;
+window.filterActiveBlocklist = filterActiveBlocklist;
+window.openViewWhitelistModal = openViewWhitelistModal;
+window.closeViewWhitelistModal = closeViewWhitelistModal;
+window.filterThreatWhitelist = filterThreatWhitelist;
+window.syncActiveBlocklistUI = syncActiveBlocklistUI;
+window.syncWhitelistUI = syncWhitelistUI;
+
+// Auto-sync initial counts
+setTimeout(function() {
+  syncActiveBlocklistUI();
+  syncWhitelistUI();
+}, 600);
+</script>
 
 </body>
 

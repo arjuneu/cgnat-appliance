@@ -2816,6 +2816,9 @@ let authToken = localStorage.getItem("nat_ai_token");
 
         renderMikrotikEntries(fleetData.entries || []);
 
+        // Load Threat Whitelist
+        loadThreatWhitelist();
+
 
 
         // Update Dynamic Header & KPI Labels
@@ -3771,7 +3774,244 @@ let authToken = localStorage.getItem("nat_ai_token");
       openAddAddressModal(ip, `Manual block: ${threatType || 'Threat'}`, selectedThreatRouter);
     }
 
-        function editRouterNode(routerId) {
+    // ==========================================
+    // THREAT SHIELD WHITELIST / BYPASS ENGINE UI
+    // ==========================================
+    let currentWhitelistEntries = [];
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function openAddWhitelistModal(target, category, description) {
+      const targetInput = document.getElementById("add-wl-target");
+      if (targetInput) targetInput.value = target || "";
+      const catInput = document.getElementById("add-wl-category");
+      if (catInput) {
+        if (category) catInput.value = category;
+        else catInput.value = "Camera & IoT";
+      }
+      const descInput = document.getElementById("add-wl-description");
+      if (descInput) descInput.value = description || "";
+      const statusEl = document.getElementById("add-wl-status");
+      if (statusEl) {
+        statusEl.style.display = "none";
+        statusEl.innerText = "";
+      }
+      const modal = document.getElementById("modal-add-whitelist");
+      if (modal) modal.style.display = "flex";
+      if (targetInput) targetInput.focus();
+    }
+
+    function closeAddWhitelistModal() {
+      const modal = document.getElementById("modal-add-whitelist");
+      if (modal) modal.style.display = "none";
+    }
+
+    async function submitAddWhitelist() {
+      const targetInput = document.getElementById("add-wl-target");
+      const categoryInput = document.getElementById("add-wl-category");
+      const descInput = document.getElementById("add-wl-description");
+      const statusEl = document.getElementById("add-wl-status");
+      const btn = document.getElementById("btn-submit-add-whitelist");
+
+      const target = targetInput ? targetInput.value.trim() : "";
+      const category = categoryInput ? categoryInput.value : "General";
+      const description = descInput ? descInput.value.trim() : "";
+
+      if (!target) {
+        if (statusEl) {
+          statusEl.style.display = "block";
+          statusEl.style.background = "rgba(239, 68, 68, 0.15)";
+          statusEl.style.color = "var(--danger)";
+          statusEl.innerText = "Target IP or CIDR prefix is required.";
+        }
+        return;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = "Adding...";
+      }
+      if (statusEl) statusEl.style.display = "none";
+
+      try {
+        const token = authToken || localStorage.getItem('nat_ai_token');
+        const res = await fetch("/api/v1/threats/whitelist", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({ target, category, description })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === "ok") {
+          if (statusEl) {
+            statusEl.style.display = "block";
+            statusEl.style.background = "rgba(34, 197, 94, 0.15)";
+            statusEl.style.color = "var(--success)";
+            statusEl.innerText = data.message || `Successfully added ${target} to whitelist`;
+          }
+          setTimeout(() => {
+            closeAddWhitelistModal();
+            loadThreatWhitelist();
+          }, 600);
+        } else {
+          throw new Error(data.detail || data.message || "Failed to add whitelist entry");
+        }
+      } catch (err) {
+        if (statusEl) {
+          statusEl.style.display = "block";
+          statusEl.style.background = "rgba(239, 68, 68, 0.15)";
+          statusEl.style.color = "var(--danger)";
+          statusEl.innerText = `Error: ${err.message}`;
+        }
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerText = "🛡️ Add to Whitelist";
+        }
+      }
+    }
+
+    async function loadThreatWhitelist() {
+      const tbody = document.getElementById("tbody-threat-whitelist");
+      const badge = document.getElementById("whitelist-count-badge");
+      if (!tbody) return;
+
+      try {
+        const token = authToken || localStorage.getItem('nat_ai_token');
+        const res = await fetch("/api/v1/threats/whitelist", {
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+        if (res.status === 401) {
+          logout();
+          return;
+        }
+        const data = await res.json();
+        if (res.ok && data.status === "ok" && data.whitelist) {
+          const wl = data.whitelist;
+          const entriesDict = wl.entries || {};
+          currentWhitelistEntries = Object.values(entriesDict);
+          renderThreatWhitelist(currentWhitelistEntries);
+          if (badge) {
+            badge.innerText = `${currentWhitelistEntries.length} Prefixes`;
+          }
+        } else {
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--danger); padding: 20px;">Failed to load whitelist: ${escapeHtml(data.detail || data.message || 'Unknown error')}</td></tr>`;
+        }
+      } catch (err) {
+        console.error("Failed to load threat whitelist:", err);
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--danger); padding: 20px;">Failed to load whitelist: ${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    function renderThreatWhitelist(entries) {
+      const tbody = document.getElementById("tbody-threat-whitelist");
+      if (!tbody) return;
+
+      if (!entries || entries.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-dim); padding: 30px;">No whitelisted prefixes found. Click "Add Whitelist Prefix" to protect critical subnets.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = entries.map(entry => {
+        const target = escapeHtml(entry.target || "");
+        const desc = escapeHtml(entry.description || "—");
+        const category = escapeHtml(entry.category || "General");
+        const asn = escapeHtml(entry.asn ? `${entry.asn} ${entry.as_name || ''}`.trim() : "—");
+        const createdAt = escapeHtml(entry.created_at || "—");
+
+        let badgeColor = "var(--primary)";
+        if (category.toLowerCase().includes("camera")) badgeColor = "var(--warning)";
+        else if (category.toLowerCase().includes("cloud")) badgeColor = "var(--info, #38bdf8)";
+        else if (category.toLowerCase().includes("social")) badgeColor = "var(--purple, #a855f7)";
+        else if (category.toLowerCase().includes("peering")) badgeColor = "var(--success)";
+
+        return `<tr>
+          <td>
+            <div style="font-family: var(--font-mono, monospace); font-weight: 600; color: var(--text-main); font-size: 12.5px;">${target}</div>
+          </td>
+          <td>
+            <div style="font-weight: 500; color: var(--text-main);">${desc}</div>
+          </td>
+          <td>
+            <span class="badge-tag" style="background: rgba(255,255,255,0.06); color: ${badgeColor}; border: 1px solid ${badgeColor}; font-size: 10.5px; padding: 2px 7px;">${category}</span>
+          </td>
+          <td>
+            <div style="font-size: 11px; color: var(--text-dim); max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${asn}">${asn}</div>
+          </td>
+          <td>
+            <div style="font-size: 11px; color: var(--text-muted);">${createdAt}</div>
+          </td>
+          <td style="text-align: right;">
+            <button class="btn-action secondary" onclick="removeThreatWhitelistEntry('${entry.target}')" style="padding: 3px 8px; font-size: 11px; color: var(--danger); border-color: rgba(239, 68, 68, 0.4);" title="Remove from whitelist">Remove</button>
+          </td>
+        </tr>`;
+      }).join("");
+    }
+
+    function filterThreatWhitelist() {
+      const searchInput = document.getElementById("search-threat-whitelist");
+      if (!searchInput) return;
+      const query = searchInput.value.toLowerCase().trim();
+      if (!query) {
+        renderThreatWhitelist(currentWhitelistEntries);
+        return;
+      }
+      const filtered = currentWhitelistEntries.filter(e => {
+        const target = (e.target || "").toLowerCase();
+        const desc = (e.description || "").toLowerCase();
+        const cat = (e.category || "").toLowerCase();
+        const asn = (e.asn || "").toLowerCase();
+        const asName = (e.as_name || "").toLowerCase();
+        return target.includes(query) || desc.includes(query) || cat.includes(query) || asn.includes(query) || asName.includes(query);
+      });
+      renderThreatWhitelist(filtered);
+    }
+
+    async function removeThreatWhitelistEntry(target) {
+      if (!confirm(`Are you sure you want to remove ${target} from the Threat Shield Whitelist?\n\nOnce removed, Threat Shield and Gemini AI will resume monitoring and may flag this subnet if suspicious flows occur.`)) {
+        return;
+      }
+
+      try {
+        const token = authToken || localStorage.getItem('nat_ai_token');
+        const res = await fetch(`/api/v1/threats/whitelist/${encodeURIComponent(target)}`, {
+          method: "DELETE",
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+        const data = await res.json();
+        if (res.ok && data.status === "ok") {
+          loadThreatWhitelist();
+        } else {
+          alert(`Failed to remove: ${data.detail || data.message || "Unknown error"}`);
+        }
+      } catch (err) {
+        alert(`Error removing entry: ${err.message}`);
+      }
+    }
+
+    window.openAddWhitelistModal = openAddWhitelistModal;
+    window.closeAddWhitelistModal = closeAddWhitelistModal;
+    window.submitAddWhitelist = submitAddWhitelist;
+    window.loadThreatWhitelist = loadThreatWhitelist;
+    window.renderThreatWhitelist = renderThreatWhitelist;
+    window.filterThreatWhitelist = filterThreatWhitelist;
+    window.removeThreatWhitelistEntry = removeThreatWhitelistEntry;
+
+    function editRouterNode(routerId) {
       const r = currentRouterFleet.find(item => item.router_id === routerId);
       if (!r) return;
       document.getElementById("router-form-title").innerHTML = `✎ Edit Router Node: <strong>${r.name}</strong>`;
@@ -4790,7 +5030,6 @@ let authToken = localStorage.getItem("nat_ai_token");
         }
 
         tbody.innerHTML = routers.map(r => {
-          const routerIp = r.router_ip || r.ip || "";
           const isOnline = r.status === "online" || r.status === "active";
           const statusBadge = isOnline ? '<span class="badge-tag green">Online</span>' : '<span class="badge-tag danger">Offline</span>';
           const syncBadge = r.sync_enabled !== false ? '<span class="badge-tag green" style="font-size:9px; padding:2px 5px;">SYNC ON</span>' : '<span class="badge-tag" style="background:rgba(255,255,255,0.06); color:var(--text-dim); font-size:9px; padding:2px 5px;">SYNC OFF</span>';
@@ -4806,7 +5045,7 @@ let authToken = localStorage.getItem("nat_ai_token");
             <tr>
               <td>
                 <strong style="color:var(--text-bright); font-size:13px;">${routerDisplayName}</strong><br>
-                <span style="color:var(--text-dim); font-size:11px; font-family:monospace;">${routerIp}</span>
+                <span style="color:var(--text-dim); font-size:11px; font-family:monospace;">${r.router_ip}</span>
               </td>
               <td><span class="${vendorBadgeClass}">${vendorTag.toUpperCase()}</span></td>
               <td><code>${r.port || 22}</code></td>
@@ -4815,9 +5054,9 @@ let authToken = localStorage.getItem("nat_ai_token");
               <td>${syncBadge}</td>
               <td>${statusBadge}</td>
               <td style="text-align:right; white-space:nowrap;">
-                <button class="btn-refresh" onclick="testRouterConnection('${routerIp}')" style="padding:3px 8px; font-size:11px;" title="Test Live SSH">&#9889; Test</button>
-                <button class="btn-refresh" onclick="editRouterEntry('${routerIp}', '${escape(r.name || '')}', '${r.vendor || 'mikrotik'}', ${r.port || 22}, '${r.username || 'natlog'}', '${r.address_list || 'scanner'}', ${r.sync_enabled !== false})" style="padding:3px 7px; font-size:11px;" title="Edit Router">&#9998;</button>
-                <button class="btn-refresh" onclick="deleteRouterEntry('${routerIp}')" style="color:#f87171; padding:3px 7px; font-size:11px;" title="Delete Router">&#128465;</button>
+                <button class="btn-refresh" onclick="testRouterConnection('${r.router_ip}')" style="padding:3px 8px; font-size:11px;" title="Test Live SSH">&#9889; Test</button>
+                <button class="btn-refresh" onclick="editRouterEntry('${r.router_ip}', '${escape(r.name || '')}', '${r.vendor || 'mikrotik'}', ${r.port || 22}, '${r.username || 'natlog'}', '${r.address_list || 'scanner'}', ${r.sync_enabled !== false})" style="padding:3px 7px; font-size:11px;" title="Edit Router">&#9998;</button>
+                <button class="btn-refresh" onclick="deleteRouterEntry('${r.router_ip}')" style="color:#f87171; padding:3px 7px; font-size:11px;" title="Delete Router">&#128465;</button>
               </td>
             </tr>
           `;

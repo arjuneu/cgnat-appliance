@@ -3454,13 +3454,21 @@ let authToken = localStorage.getItem("nat_ai_token");
 
 
 
-    function renderMikrotikEntries(entries) {
+    let currentRawMikrotikEntries = [];
 
+    function renderMikrotikEntries(entries, isFilter = false) {
+      if (!isFilter) {
+        currentRawMikrotikEntries = entries || [];
+      }
       const tbody = document.getElementById("tbody-mikrotik-entries");
-
       const countEl = document.getElementById("mikrotik-list-count");
+      const modalCountEl = document.getElementById("modal-blocklist-count");
+      const topBadge = document.getElementById("top-blocklist-badge");
 
-      countEl.innerText = `${entries.length} active dropped rules`;
+      const totalCount = (entries || []).length;
+      if (countEl) countEl.innerText = `${totalCount} active dropped rules`;
+      if (modalCountEl) modalCountEl.innerText = `${totalCount} Rules`;
+      if (topBadge && !isFilter) topBadge.innerText = totalCount;
 
 
 
@@ -3906,6 +3914,10 @@ let authToken = localStorage.getItem("nat_ai_token");
           if (badge) {
             badge.innerText = `${currentWhitelistEntries.length} Prefixes`;
           }
+          const topWlBadge = document.getElementById("top-whitelist-badge");
+          if (topWlBadge) {
+            topWlBadge.innerText = currentWhitelistEntries.length;
+          }
         } else {
           tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--danger); padding: 20px;">Failed to load whitelist: ${escapeHtml(data.detail || data.message || 'Unknown error')}</td></tr>`;
         }
@@ -4010,6 +4022,55 @@ let authToken = localStorage.getItem("nat_ai_token");
     window.renderThreatWhitelist = renderThreatWhitelist;
     window.filterThreatWhitelist = filterThreatWhitelist;
     window.removeThreatWhitelistEntry = removeThreatWhitelistEntry;
+
+    function openActiveBlocklistModal() {
+      const modal = document.getElementById("modal-view-blocklist");
+      if (modal) modal.style.display = "flex";
+      const input = document.getElementById("search-active-blocklist");
+      if (input) input.focus();
+    }
+
+    function closeActiveBlocklistModal() {
+      const modal = document.getElementById("modal-view-blocklist");
+      if (modal) modal.style.display = "none";
+    }
+
+    function filterActiveBlocklist() {
+      const input = document.getElementById("search-active-blocklist");
+      if (!input) return;
+      const q = input.value.toLowerCase().trim();
+      if (!q) {
+        renderMikrotikEntries(currentRawMikrotikEntries, true);
+        return;
+      }
+      const filtered = (currentRawMikrotikEntries || []).filter(item => {
+        const addr = (item.address || "").toLowerCase();
+        const comment = (item.comment || item.list || "").toLowerCase();
+        const rip = (item.router_ip || "").toLowerCase();
+        const vendor = (item.vendor || "").toLowerCase();
+        return addr.includes(q) || comment.includes(q) || rip.includes(q) || vendor.includes(q);
+      });
+      renderMikrotikEntries(filtered, true);
+    }
+
+    function openViewWhitelistModal() {
+      const modal = document.getElementById("modal-view-whitelist");
+      if (modal) modal.style.display = "flex";
+      loadThreatWhitelist();
+      const input = document.getElementById("search-threat-whitelist");
+      if (input) input.focus();
+    }
+
+    function closeViewWhitelistModal() {
+      const modal = document.getElementById("modal-view-whitelist");
+      if (modal) modal.style.display = "none";
+    }
+
+    window.openActiveBlocklistModal = openActiveBlocklistModal;
+    window.closeActiveBlocklistModal = closeActiveBlocklistModal;
+    window.filterActiveBlocklist = filterActiveBlocklist;
+    window.openViewWhitelistModal = openViewWhitelistModal;
+    window.closeViewWhitelistModal = closeViewWhitelistModal;
 
     function editRouterNode(routerId) {
       const r = currentRouterFleet.find(item => item.router_id === routerId);

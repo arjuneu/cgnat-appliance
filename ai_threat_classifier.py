@@ -117,6 +117,22 @@ def _build_protected_networks() -> List[ipaddress.IPv4Network]:
             nets.append(ipaddress.ip_network(pool.strip()))
         except Exception:
             pass
+
+    # Dynamic Threat Shield Whitelist entries
+    try:
+        from threat_shield_engine import get_threat_whitelist
+        wl = get_threat_whitelist()
+        for target in wl.get("entries", {}).keys():
+            try:
+                if "/" in target:
+                    nets.append(ipaddress.ip_network(target.strip(), strict=False))
+                else:
+                    nets.append(ipaddress.ip_network(f"{target.strip()}/32"))
+            except Exception:
+                pass
+    except Exception as e:
+        logger.warning(f"Could not load dynamic threat whitelist into protected networks: {e}")
+
     return nets
 
 PROTECTED_NETWORKS = _build_protected_networks()
@@ -293,6 +309,14 @@ def extract_candidate_threats(hours: float = 0.5, router_ip: Optional[str] = Non
             sql_exclusions.append(f"AND NOT (dst_ip >= IPv4StringToNum('{net.network_address}') AND dst_ip <= IPv4StringToNum('{net.broadcast_address}'))")
         except Exception:
             pass
+
+    # Dynamic Threat Shield Whitelist SQL Exclusions
+    try:
+        from threat_shield_engine import get_whitelist_sql_exclusions
+        sql_exclusions.extend(get_whitelist_sql_exclusions())
+    except Exception as e:
+        logger.warning(f"Could not load dynamic whitelist sql exclusions: {e}")
+
     exclusions_clause = "\n          ".join(sql_exclusions)
 
     # High-Speed 2-Step Subquery (0.2s for 15-30m window)
@@ -429,6 +453,14 @@ def evaluate_threats_with_ai(candidates: List[Dict[str, Any]]) -> Tuple[List[Dic
     """Sends candidate threat features to Google Gemini AI API in strict Key Vault priority order."""
     if not candidates:
         return [], "No candidates"
+
+    # Whitelist Safety Filter: Ensure NO whitelisted targets are sent to Gemini
+    unwhitelisted = [c for c in candidates if not is_whitelisted(c.get("target", ""))]
+    if len(unwhitelisted) < len(candidates):
+        logger.info(f"[WHITELIST FILTER] Filtered {len(candidates) - len(unwhitelisted)} whitelisted candidates before Gemini AI evaluation.")
+    candidates = unwhitelisted
+    if not candidates:
+        return [], "All candidates whitelisted"
 
     keys_in_order = key_vault.get_raw_keys_in_order() if key_vault else []
     if not keys_in_order:

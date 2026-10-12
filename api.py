@@ -948,7 +948,55 @@ def update_threat_config_endpoint(
 
     }
 
+class ThreatWhitelistRequest(BaseModel):
+    target: str
+    description: Optional[str] = ""
+    category: Optional[str] = "General"
 
+@app.get("/api/v1/threats/whitelist")
+def get_threat_whitelist_endpoint(
+    user_payload: Dict[str, Any] = Depends(get_current_user)
+):
+    try:
+        from threat_shield_engine import get_threat_whitelist
+        wl = get_threat_whitelist()
+        return {"status": "ok", "whitelist": wl}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/threats/whitelist")
+def add_threat_whitelist_endpoint(
+    req: ThreatWhitelistRequest,
+    user_payload: Dict[str, Any] = Depends(get_current_user)
+):
+    try:
+        from threat_shield_engine import add_to_whitelist
+        username = user_payload.get("username", "admin")
+        success = add_to_whitelist(
+            target=req.target.strip(),
+            description=req.description or "",
+            category=req.category or "General",
+            added_by=username
+        )
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to add target to whitelist")
+        return {"status": "ok", "message": f"Successfully added {req.target} to Threat Shield Whitelist"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/v1/threats/whitelist/{target:path}")
+def remove_threat_whitelist_endpoint(
+    target: str,
+    user_payload: Dict[str, Any] = Depends(get_current_user)
+):
+    try:
+        from threat_shield_engine import remove_from_whitelist
+        success = remove_from_whitelist(target.strip())
+        if not success:
+            raise HTTPException(status_code=404, detail="Target not found in whitelist")
+        return {"status": "ok", "message": f"Successfully removed {target} from Threat Shield Whitelist"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 class AuditPruneRequest(BaseModel):
 

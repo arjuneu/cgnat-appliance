@@ -84,25 +84,103 @@ def is_sync_enabled() -> bool:
         return False
     return get_threat_config().get("enabled", True)
 
+WHITELIST_FILE = os.getenv("THREAT_WHITELIST_FILE", "/opt/nat-ai-agent/data/threat_whitelist.json")
+
+def get_threat_whitelist() -> Dict[str, Any]:
+    """Loads persistent whitelist of IPs and prefixes that Threat Shield must never flag or block."""
+    if os.path.exists(WHITELIST_FILE):
+        try:
+            with open(WHITELIST_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load threat whitelist: {e}")
+    return {"version": "1.0", "last_updated": time.strftime("%Y-%m-%d %H:%M:%S"), "total": 0, "entries": {}}
+
+def save_threat_whitelist(whitelist_data: Dict[str, Any]) -> bool:
+    """Persists threat whitelist to disk and updates runtime network cache."""
+    global WHITELIST_NETWORKS
+    try:
+        os.makedirs(os.path.dirname(WHITELIST_FILE), exist_ok=True)
+        whitelist_data["last_updated"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        whitelist_data["total"] = len(whitelist_data.get("entries", {}))
+        with open(WHITELIST_FILE, "w", encoding="utf-8") as f:
+            json.dump(whitelist_data, f, indent=2)
+        WHITELIST_NETWORKS = _build_whitelist_networks()
+        logger.info(f"Saved {whitelist_data['total']} whitelist entries to {WHITELIST_FILE}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to save threat whitelist: {e}")
+        return False
+
+def add_to_whitelist(target: str, description: str = "", category: str = "General", added_by: str = "admin") -> bool:
+    """Adds a CIDR or IP to persistent whitelist."""
+    wl = get_threat_whitelist()
+    entries = wl.get("entries", {})
+    entries[target] = {
+        "target": target,
+        "description": description,
+        "category": category,
+        "added_by": added_by,
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
+    }
+    wl["entries"] = entries
+    return save_threat_whitelist(wl)
+
+def remove_from_whitelist(target: str) -> bool:
+    """Removes a CIDR or IP from persistent whitelist."""
+    wl = get_threat_whitelist()
+    entries = wl.get("entries", {})
+    if target in entries:
+        del entries[target]
+        wl["entries"] = entries
+        return save_threat_whitelist(wl)
+    return False
+
+def get_whitelist_sql_exclusions() -> List[str]:
+    """Generates ClickHouse SQL exclusion conditions for all whitelisted networks."""
+    sql = []
+    wl = get_threat_whitelist()
+    for target in wl.get("entries", {}).keys():
+        try:
+            net = ipaddress.ip_network(target.strip(), strict=False)
+            sql.append(f"AND NOT (dst_ip >= IPv4StringToNum('{net.network_address}') AND dst_ip <= IPv4StringToNum('{net.broadcast_address}'))")
+        except Exception:
+            pass
+    return sql
+
 def _build_whitelist_networks() -> List[ipaddress.IPv4Network]:
     nets = [
         ipaddress.ip_network("10.0.0.0/8"),
         ipaddress.ip_network("172.16.0.0/12"),
         ipaddress.ip_network("192.168.0.0/16"),
         ipaddress.ip_network("127.0.0.0/8"),
-            ]
+    ]
     for pool in getattr(config, "ISP_PUBLIC_POOLS", ["203.0.113.0/24"]):
         try: nets.append(ipaddress.ip_network(pool.strip()))
         except Exception: pass
     for pool in getattr(config, "CGNAT_POOLS", ["100.64.0.0/10"]):
         try: nets.append(ipaddress.ip_network(pool.strip()))
         except Exception: pass
+
+    # Dynamic user-configured whitelist entries
+    wl = get_threat_whitelist()
+    for target in wl.get("entries", {}).keys():
+        try:
+            if "/" in target:
+                nets.append(ipaddress.ip_network(target.strip(), strict=False))
+            else:
+                nets.append(ipaddress.ip_network(f"{target.strip()}/32"))
+        except Exception:
+            pass
     return nets
 
 WHITELIST_NETWORKS = _build_whitelist_networks()
 
 def is_whitelisted(addr_str: str) -> bool:
     try:
+        global WHITELIST_NETWORKS
+        if not WHITELIST_NETWORKS:
+            WHITELIST_NETWORKS = _build_whitelist_networks()
         if "/" in addr_str:
             target_net = ipaddress.ip_network(addr_str, strict=False)
             for net in WHITELIST_NETWORKS:

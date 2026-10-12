@@ -50,6 +50,22 @@ def _build_whitelist_networks():
     for pool in getattr(config, "CGNAT_POOLS", ["100.64.0.0/10"]):
         try: nets.append(ipaddress.ip_network(pool.strip()))
         except Exception: pass
+
+    # Dynamic Threat Shield Whitelist entries
+    try:
+        from threat_shield_engine import get_threat_whitelist
+        wl = get_threat_whitelist()
+        for target in wl.get("entries", {}).keys():
+            try:
+                if "/" in target:
+                    nets.append(ipaddress.ip_network(target.strip(), strict=False))
+                else:
+                    nets.append(ipaddress.ip_network(f"{target.strip()}/32"))
+            except Exception:
+                pass
+    except Exception as e:
+        logger.warning(f"Could not load dynamic threat whitelist into router_sync: {e}")
+
     return nets
 
 WHITELIST_NETWORKS = _build_whitelist_networks()

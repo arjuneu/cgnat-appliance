@@ -725,6 +725,99 @@
     </div>
   </div>
 
+  <!-- Active Router Fleet Blocklist Modal -->
+  <div id="modal-view-blocklist" class="modal-overlay" style="display: none;">
+    <div class="modal-box" style="width: 1050px; max-width: 95vw; max-height: 88vh; display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <h2 style="margin: 0; font-size: 16px; color: var(--text-main);">&#128737;&#65039; Active Blocklist on Router Fleet</h2>
+          <span id="modal-blocklist-count" class="badge-tag red" style="font-size: 11px; padding: 3px 8px;">0 Rules</span>
+          <span id="blocklist-panel-title" style="display: none;"></span>
+          <span id="mikrotik-list-count" style="display: none;"></span>
+        </div>
+        <button onclick="closeActiveBlocklistModal()" style="background: transparent; border: none; color: var(--text-dim); font-size: 22px; cursor: pointer; line-height: 1;">&times;</button>
+      </div>
+      
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; flex-wrap: wrap;">
+        <p style="margin: 0; font-size: 12px; color: var(--text-muted);">
+          Currently enforced dropped rules and prefixes pushed to MikroTik and Juniper router firewalls.
+        </p>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input type="text" id="search-active-blocklist" class="form-control" placeholder="Search IP, subnet, router, comment..." style="width: 260px; height: 30px; font-size: 11.5px; padding: 4px 10px;" oninput="filterActiveBlocklist()" />
+          <button class="btn-refresh" onclick="openAddAddressModal()" style="font-weight: 600; color: #f87171; border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1);">&#10010; Add Threat Rule</button>
+          <button class="btn-refresh" onclick="loadThreatData()" title="Refresh Blocklist">&#8635; Refresh</button>
+        </div>
+      </div>
+
+      <div class="table-container" style="flex: 1; max-height: 520px; overflow-y: auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width: 170px;">Router Node</th>
+              <th style="width: 180px;">Address / CIDR</th>
+              <th>Comment / Policy</th>
+              <th style="width: 170px;">Creation Time</th>
+              <th style="text-align: right; width: 140px;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-mikrotik-entries">
+            <tr><td colspan="5" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading active entries...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; margin-top: 14px;">
+        <button class="btn-action secondary" onclick="closeActiveBlocklistModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Threat Shield Whitelist / Protected Services Modal -->
+  <div id="modal-view-whitelist" class="modal-overlay" style="display: none;">
+    <div class="modal-box" style="width: 1100px; max-width: 95vw; max-height: 88vh; display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <h2 style="margin: 0; font-size: 16px; color: var(--text-main);">&#128304; Protected Services &amp; Threat Whitelist</h2>
+          <span id="whitelist-count-badge" class="badge-tag green" style="font-size: 11px; padding: 3px 8px;">0 Prefixes</span>
+        </div>
+        <button onclick="closeViewWhitelistModal()" style="background: transparent; border: none; color: var(--text-dim); font-size: 22px; cursor: pointer; line-height: 1;">&times;</button>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; flex-wrap: wrap;">
+        <p style="margin: 0; font-size: 12px; color: var(--text-muted);">
+          Prefixes in this list are completely bypassed by Threat Shield (never flagged, never evaluated by AI, never blocked on routers).
+        </p>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input type="text" id="search-threat-whitelist" class="form-control" placeholder="Search prefix, service, category..." style="width: 260px; height: 30px; font-size: 11.5px; padding: 4px 10px;" oninput="filterThreatWhitelist()" />
+          <button class="btn-refresh" onclick="openAddWhitelistModal()" style="font-weight: 600; color: var(--success); border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.1);">&#10010; Add Whitelist Prefix</button>
+          <button class="btn-refresh" onclick="loadThreatWhitelist()" title="Refresh Whitelist">&#8635; Refresh</button>
+        </div>
+      </div>
+
+      <div class="table-container" style="flex: 1; max-height: 520px; overflow-y: auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width: 180px;">Prefix / Target</th>
+              <th>Service / Description</th>
+              <th>Category</th>
+              <th>ASN / Network Info</th>
+              <th>Added Date</th>
+              <th style="text-align: right; width: 90px;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-threat-whitelist">
+            <tr><td colspan="6" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading whitelist entries...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; margin-top: 14px;">
+        <button class="btn-action secondary" onclick="closeViewWhitelistModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Multi-Vendor Router Fleet Management Modal -->
 
 
@@ -7133,6 +7226,10 @@
 
           <button class="btn-action primary" id="btn-sync-mikrotik" onclick="triggerManualAIScan()">&#9889; Run AI Scan Now</button>
 
+          <button class="btn-refresh" id="btn-show-active-blocklist" onclick="openActiveBlocklistModal()" style="font-weight: 600;" title="View Active Blocklist Rules on Router Fleet">&#128737; Active Blocklist <span id="top-blocklist-badge" class="badge-tag red" style="font-size: 10px; padding: 2px 6px; margin-left: 4px;">0</span></button>
+
+          <button class="btn-refresh" id="btn-show-whitelist" onclick="openViewWhitelistModal()" style="font-weight: 600;" title="View Protected Services & Threat Whitelist">&#128304; Protected Services <span id="top-whitelist-badge" class="badge-tag green" style="font-size: 10px; padding: 2px 6px; margin-left: 4px;">0</span></button>
+
           <button class="btn-refresh" onclick="loadThreatData()">&#8635; Refresh</button>
 
         </div>
@@ -7375,484 +7472,33 @@
 
 
 
-      <!-- 2-Column: Detected Threats Table & Active Router Fleet Blocklist Table -->
-
-
-
-
-
-
-
-      <div class="dual-grid">
-
-
-
-
-
-
-
-        
-
-
-
-
-
-
-
-        <!-- Left: Detected Threats in last 15m -->
-
-
-
-
-
-
-
-        <div class="section-card" style="display: flex; flex-direction: column;">
-
-
-
-
-
-
-
-          <div class="section-title">
-
-
-
-
-
-
-
-            <span>&#128308; 🧠 Live 15-Minute AI Threat Stream</span>
-
-
-
-
-
-
-
-            <span id="threat-candidate-count" style="color: var(--text-dim);">Scanning...</span>
-
-
-
-
-
-
-
-          </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-          <div class="table-container" style="flex: 1; max-height: 480px; overflow-y: auto;">
-
-
-
-
-
-
-
-            <table class="data-table">
-
-
-
-
-
-
-
-              <thead>
-
-
-
-
-
-
-
-                <tr>
-
-
-
-
-
-
-
-                  <th>Target IP</th>
-
-
-
-
-
-
-
-                  <th>Threat Type</th>
-
-
-
-
-
-
-
-                  <th>Distinct Ports</th>
-
-
-
-
-
-
-
-                  <th>Flows</th>
-
-
-
-
-
-
-
-                  <th>Subscribers</th>
-
-
-
-
-
-
-
-                  <th>Status</th>
-
-
-
-
-
-
-
-                  <th style="text-align: right;">Action</th>
-
-
-
-
-
-
-
-                </tr>
-
-
-
-
-
-
-
-              </thead>
-
-
-
-
-
-
-
-              <tbody id="tbody-threat-candidates">
-
-
-
-
-
-
-
-                <tr><td colspan="7" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading detected threats...</td></tr>
-
-
-
-
-
-
-
-              </tbody>
-
-
-
-
-
-
-
-            </table>
-
-
-
-
-
-
-
-          </div>
-
-
-
-
-
-
-
+            <!-- Live 15-Minute AI Threat Stream Table (Full Width) -->
+      <div class="section-card" style="margin-top: 15px; display: flex; flex-direction: column;">
+        <div class="section-title">
+          <span>&#128308; 🧠 Live 15-Minute AI Threat Stream</span>
+          <span id="threat-candidate-count" style="color: var(--text-dim);">Scanning...</span>
         </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        <!-- Right: Active Blocklist on Router Fleet -->
-
-
-
-
-
-
-
-        <div class="section-card" style="display: flex; flex-direction: column;">
-
-
-
-
-
-
-
-          <div class="section-title">
-
-
-
-
-
-
-
-            <span id="blocklist-panel-title">&#128737;&#65039; Active Blocklist on Selected Router / Fleet</span>
-
-
-
-
-
-
-
-            <span id="mikrotik-list-count" style="color: var(--text-muted);">Loading list...</span>
-
-
-
-
-
-
-
-          </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-          <div class="table-container" style="flex: 1; max-height: 480px; overflow-y: auto;">
-
-
-
-
-
-
-
-            <table class="data-table">
-
-
-
-
-
-
-
-              <thead>
-
-
-
-
-
-
-
-                <tr>
-
-
-
-
-
-
-
-                  <th>Router Node</th>
-
-
-
-
-
-
-
-                  <th>Address / CIDR</th>
-
-
-
-
-
-
-
-                  <th>Comment / Policy</th>
-
-
-
-
-
-
-
-                  <th>Creation Time</th>
-
-
-
-
-
-
-
-                  <th style="text-align: right;">Action</th>
-
-
-
-
-
-
-
-                </tr>
-
-
-
-
-
-
-
-              </thead>
-
-
-
-
-
-
-
-              <tbody id="tbody-mikrotik-entries">
-
-
-
-
-
-
-
-                <tr><td colspan="5" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading active entries...</td></tr>
-
-
-
-
-
-
-
-              </tbody>
-
-
-
-
-
-
-
-            </table>
-
-
-
-
-
-
-
-          </div>
-
-
-
-
-
-
-
-        </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      </div>
-
-      <!-- Threat Shield Whitelist & Bypass Prefixes Card -->
-      <div class="section-card" style="margin-top: 18px; display: flex; flex-direction: column;">
-        <div class="section-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span>🛡️ Protected Services &amp; Threat Whitelist (Zero-Evaluation Bypass)</span>
-            <span id="whitelist-count-badge" class="badge-tag green" style="font-size: 11px; padding: 3px 8px;">0 Prefixes</span>
-          </div>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <input type="text" id="search-threat-whitelist" class="form-control" placeholder="Search prefix, service, category..." style="width: 220px; height: 30px; font-size: 11.5px; padding: 4px 10px;" oninput="filterThreatWhitelist()" />
-            <button class="btn-refresh" onclick="openAddWhitelistModal()" style="font-weight: 600; color: var(--success); border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.1);">&#10010; Add Whitelist Prefix</button>
-            <button class="btn-refresh" onclick="loadThreatWhitelist()" title="Refresh Whitelist">&#8635; Refresh</button>
-          </div>
-        </div>
-        <p style="font-size: 12px; color: var(--text-muted); margin: 6px 0 12px 0;">
-          Prefixes in this list are completely bypassed by Threat Shield (never flagged as threats, never evaluated by AI, and never blocked on routers). Use this to safeguard camera apps (UniEase, EZVIZ, Tapo), CDNs, and legitimate high-traffic infrastructure.
-        </p>
-        <div class="table-container" style="max-height: 420px; overflow-y: auto;">
+        <div class="table-container" style="flex: 1; max-height: 580px; overflow-y: auto;">
           <table class="data-table">
             <thead>
               <tr>
-                <th style="width: 180px;">Prefix / Target</th>
-                <th>Service / Description</th>
-                <th>Category</th>
-                <th>ASN / Network Info</th>
-                <th>Added Date</th>
-                <th style="text-align: right; width: 90px;">Action</th>
+                <th>Target IP</th>
+                <th>Distinct Ports</th>
+                <th>Flows</th>
+                <th>Subscribers</th>
+                <th>Status</th>
+                <th>AI Verdict</th>
+                <th style="text-align: right;">Action</th>
               </tr>
             </thead>
-            <tbody id="tbody-threat-whitelist">
-              <tr><td colspan="6" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading whitelist entries...</td></tr>
+            <tbody id="tbody-threat-candidates">
+              <tr><td colspan="7" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading detected threats...</td></tr>
             </tbody>
           </table>
         </div>
       </div>
 
-    </div>
+</div>
 
 
 
